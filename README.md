@@ -1,6 +1,6 @@
 
 ____
-# UCLA-MSU Two-Temperature-Model
+<font color=#FFBB00> # UCLA-MSU Two-Temperature-Model </font>
 _____
 
 Code, papers and notes for the UCLA-MSU TTM are stored here.
