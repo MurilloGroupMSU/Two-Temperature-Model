@@ -200,7 +200,8 @@ class JT_GMS_Physics(Physical_Parameters):
         μ = k_B*T*(term_1 + term_2 + term_3)
         
         return μ
-
+        
+    @staticmethod
     def electron_heat_capacity(n_e):
         """
         Returns the electron heat capacity
@@ -210,7 +211,8 @@ class JT_GMS_Physics(Physical_Parameters):
         """
         Ce = 3/2 * k_B * n_e # Electron ideal gas heat capacity
         return Ce
-    
+
+    @staticmethod
     def ion_heat_capacity(n_i):
         """
         Returns the ion heat capacity
@@ -222,9 +224,12 @@ class JT_GMS_Physics(Physical_Parameters):
         return Ci
 
     @classmethod
-    def ion_electron_coupling_factor(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+    def ei_coupling_factor(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
         Returns G, the electron-ion coupling factor
+
+        CHECK: See ei_relaxation_time note for possible amiguity
+
         Args:
             n_e: e number density [1/m^3]
             n_i: ion number density [1/m^3]
@@ -234,8 +239,12 @@ class JT_GMS_Physics(Physical_Parameters):
             Ti: Ion Tempearture [K]
         Returns:
             G: electron-ion coupling 
-        Returns:
         """
+        Ce = cls.electron_heat_capacity(n_e)
+        τei_e = cls.ei_relaxation_time( n_e, n_i, m_i, Z_i, Te, Ti) 
+        
+        G = Ce/τei_e
+        return G
 
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
@@ -252,11 +261,32 @@ class JT_GMS_Physics(Physical_Parameters):
         ke = 1/3 * vthe**2 *τei * Ce 
         return ke
 
+    @classmethod
+    def ion_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Not Implemented yet
+        Args:
+
+        Returns:
+            ki: [k_B /(ms)]
+        """
+        ki = 1e-40
+        return ki
+
+
     
     @classmethod   
     def ei_relaxation_time(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
         Returns Spitzer formula for electron-ion thermalization timescale
+
+
+        CHECK: Amiguous in paper if electron or ion T relaxation time! 
+        from "Electron-ion equilibration in a strongly coupled plasma"
+            by A. Ng, P. Celliers, * G. Xu, and A. Forsman
+        I think this is \tau_{ei}^e, meaning electron relaxation
+        Thus, G = C_e/\tau_{ei} = C_i / ( \tau_{ei} / Z )
+
         Assumes No. 4 log Λ  in GMS paper
         Args:
             n_e: e number density [1/m^3]
@@ -267,6 +297,7 @@ class JT_GMS_Physics(Physical_Parameters):
             Ti: Ion Tempearture [K]
         Returns:
             τei relaxation time [s]
+
         """
         λD = cls.electron_Debye_length(n_e, Te)
         ai = cls.r_WignerSeitz(n_i)
@@ -285,3 +316,45 @@ class JT_GMS_Physics(Physical_Parameters):
         τei = unit_conversion* (3 * m_i * m_e) / (4 * np.sqrt(2*π)*n_i*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2 )**(3/2)
 
         return τei
+
+    @classmethod
+    def electron_diffusivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns electron thermal diffusivity D_e
+
+        Assumes No. 4 log Λ  in GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            De diffusivity [m^2/s]
+        """
+        ke = cls.electron_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        Ce = cls.electron_heat_capacity(n_e)
+        De = ke/Ce
+        return De
+
+    @classmethod
+    def ion_diffusivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns ion thermal diffusivity D_i
+
+        Assumes No. 4 log Λ  in GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            Di diffusivity [m^2/s]
+        """
+        ki = cls.ion_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        Ci = cls.ion_heat_capacity(n_i)
+        Di = ki/Ci
+        return Di
