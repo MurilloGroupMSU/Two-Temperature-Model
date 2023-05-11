@@ -311,7 +311,7 @@ class JT_GMS_Physics(Physical_Parameters):
         bref = np.sqrt(λdBe**2 + r_closest_approach**2)
         
         λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
-
+        
         vth_e = k_B*Te/m_e
 
         unit_conversion = (4*π*ε_0)**2
