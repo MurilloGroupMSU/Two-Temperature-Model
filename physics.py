@@ -211,8 +211,8 @@ class JT_GMS_Physics(Physical_Parameters):
         """
         Ce_classical = 3/2 * k_B * n_e # Electron ideal gas heat capacity
         
-        Ce = π**2 / 3 * cls.Theta(n_e, Te)
-        return Ce
+        # Ce = π**2 / 3 * cls.Theta(n_e, Te)
+        return Ce_classical
 
     @staticmethod
     def ion_heat_capacity(n_i):
