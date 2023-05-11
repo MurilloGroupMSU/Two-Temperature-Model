@@ -20,6 +20,11 @@ class Cylindrical_Grid():
         self.cell_volumes = 2*π*(self.r[1:]**2 - self.r[:-1]**2)
         self.N = N
 
+        self.Vol = self.integrate_f(np.ones(N-1))
+    
+    def integrate_f(self, f, endpoint=-1):
+        return np.sum(  (self.cell_volumes*f)[:endpoint] )
+
 class Experiment():
     """
     Contains all of the UCLA related experimental details.
@@ -45,13 +50,14 @@ class Experiment():
         self.laser_width = laser_width
         self.n0 = n0 # Density- may change this variable later
 
-        self.make_T_profiles()
         self.make_n_profiles()
+        self.make_T_profiles()
         self.make_physical_timescales()
 
     def make_T_profiles(self):
         """
-        Makes an initial temperature profile after laser heating for the electrons and ion
+        Makes an initial temperature profile after laser heating for the electrons and ion.
+        Currently assumes measured Temperature is based on bulk average over laser width region
         Args:
             None
         Returns:
@@ -61,6 +67,14 @@ class Experiment():
         σ = self.laser_width
         self.Te = self.Te_init*np.exp(-r**2/(2*σ**2)) #Gaussian Laser
         self.Ti = self.Ti_init*np.exp(-r**2/(2*σ**2))
+        
+        # Rescale so bulk Temperature is the initial one.
+        width_index = np.argmin(np.abs(self.grid.r - self.laser_width))
+        av_Te = self.grid.integrate_f(self.n_e[:-1]*self.Te[:-1], endpoint=width_index)/self.grid.integrate_f(self.n_e[:-1], endpoint=width_index)
+        av_Ti = self.grid.integrate_f(self.n_i[:-1]*self.Ti[:-1], endpoint=width_index)/self.grid.integrate_f(self.n_i[:-1], endpoint=width_index)
+        
+        self.Te *= self.Te_init/av_Te
+        self.Ti *= self.Ti_init/av_Ti
 
     def make_n_profiles(self):
         """
@@ -153,7 +167,7 @@ class TwoTemperatureModel():
         # print("\nTotal time: {0:.1e} ns,  dt = {1:.1e} ps".format(1e9*self.tmax, 1e12*self.dt))
     
     def print_timescales(self):
-        print("\nDefault simulation time: {0:.1e} ns,  dt = {1:.1e} ps".format(1e9*self.tmax, 1e12*self.dt))
+        print("\nSimulation time: {0:.1e} ns,  dt = {1:.1e} ps, steps = {2}".format(1e9*self.tmax, 1e12*self.dt, len(self.t_list)))
         print("  Diffusion time (r_max): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_rmax, 1e9*self.experiment.τDiff_i_rmax))
         print("  Diffusion time (dr): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_dr,1e9*self.experiment.τDiff_i_dr))
 
@@ -177,7 +191,7 @@ class TwoTemperatureModel():
             ke = self.ke(self.n_e, self.n_i, self.Te,self.Ti)
             ki = self.ki(self.n_e, self.n_i, self.Te,self.Ti)
             G  = self.G (self.n_e, self.n_i, self.Te,self.Ti)[:-1]
-            Ce = params.electron_heat_capacity(self.n_e)[:-1]
+            Ce = params.electron_heat_capacity(self.n_e, self.Te)[:-1]
             Ci = params.ion_heat_capacity(self.n_i)[:-1]
 
             Te_flux = ke * 2*π*self.grid.r * self.grad_T(self.Te) #Cylindrical flux first order
