@@ -5,7 +5,8 @@
 
 
 import numpy as np
-from physics import JT_GMS_Physics as params
+from physics import JT_GMS_Physics as jt_mod
+from physics import SMT as smt_mod
 from constants import *
 
 class Cylindrical_Grid():
@@ -26,7 +27,7 @@ class Experiment():
     Initializes all physical parameters according to initial conditions of experiment.
     """
 
-    def __init__(self, grid, n0, Z_i, A, Te_initial, Ti_initial,laser_width, gas_name='Argon'):
+    def __init__(self, grid, n0, Z_i, A, Te_initial, Ti_initial,laser_width, gas_name='Argon', model = "SMT"):
         """
         Args:
             n0: Density of gas [1/m^3] 
@@ -44,11 +45,18 @@ class Experiment():
         self.Ti_init = Ti_initial
         self.laser_width = laser_width
         self.n0 = n0 # Density- may change this variable later
-
+        
+        if model == "SMT":
+            self.params = smt_mod
+        else:
+            self.params = jt_mod
+        
         self.make_T_profiles()
         self.make_n_profiles()
         self.make_physical_timescales()
 
+
+        
     def make_T_profiles(self):
         """
         Makes an initial temperature profile after laser heating for the electrons and ion
@@ -84,9 +92,9 @@ class Experiment():
         n_e, n_i, m_i, Z_i, Te, Ti = (self.n_e[0], self.n_i[0], self.m_i, 
                                       self.Z_i, self.Te_init, self.Ti_init)
 
-        self.τei_Equilibration = params.ei_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti) 
-        self.τDiff_e_rmax = self.grid.r_max**2 / params.electron_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
-        self.τDiff_i_rmax = self.grid.r_max**2 / params.ion_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        self.τei_Equilibration, self.τie_Equilibration = self.params.ei_relaxation_times(n_e, n_i, m_i, Z_i, Te, Ti) 
+        self.τDiff_e_rmax = self.grid.r_max**2 / self.params.electron_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        self.τDiff_i_rmax = self.grid.r_max**2 / self.params.ion_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
         self.τDiff_e_dr = self.τDiff_e_rmax * (self.grid.dr / self.grid.r_max)**2
         self.τDiff_i_dr = self.τDiff_i_rmax * (self.grid.dr / self.grid.r_max)**2
     
@@ -102,7 +110,7 @@ class TwoTemperatureModel():
     Implements a two temperature model of a plasma as a cylinder
     """
 
-    def __init__(self, Experiment):
+    def __init__(self, Experiment, model = "SMT"):
         self.experiment = Experiment
         self.grid = Experiment.grid
 
@@ -112,6 +120,11 @@ class TwoTemperatureModel():
         self.n_i = Experiment.n_i # .copy() or leave as is?
         self.n_e = Experiment.n_e
 
+        if model == "SMT":
+            self.params = smt_mod
+        else:
+            self.params = jt_mod
+        
     #Gradient Function
     def grad_T(self, T): #Gradient at boundaries. Neumann at 0, cylinder axis. 
         grad_T   = (T - np.roll(T,1))/self.grid.dr
@@ -120,26 +133,32 @@ class TwoTemperatureModel():
 
     def ke(self, n_e, n_i, Te, Ti ):
         m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
-        return params.electron_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
+        return self.params.electron_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
 
     def ki(self, n_e, n_i, Te, Ti ):
-        return 0
+        m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
+        return self.params.ion_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
 
     def G(self, n_e, n_i, Te, Ti ):
         m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
-        return params.ei_coupling_factor(n_e, n_i, m_i, Z_i, Te, Ti)
+        gei, gie = self.params.ei_coupling_factors(n_e, n_i, m_i, Z_i, Te, Ti)
+
+        return gei, gie 
 
     def get_tmax(self):
         τ_κ = self.experiment.τei_Equilibration
         return 5*τ_κ
     
     def get_dt(self):
-        shortest_timescale_on_dr = np.min([self.experiment.τei_Equilibration, self.experiment.τDiff_e_dr,
+        shortest_timescale_on_dr = np.min([self.experiment.τei_Equilibration, self.experiment.τei_Equilibration, self.experiment.τDiff_e_dr,
                                            self.experiment.τDiff_e_dr]) 
         
+        # print(self.experiment.τei_Equilibration, self.experiment.τei_Equilibration, self.experiment.τDiff_e_dr,
+        #                                    self.experiment.τDiff_e_dr)
         return 1e-1*shortest_timescale_on_dr
 
     def make_times(self, dt=None, tmax=None):
+
         if dt == None:
             self.dt = self.get_dt()
         else:
@@ -157,7 +176,7 @@ class TwoTemperatureModel():
         print("  Diffusion time (r_max): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_rmax, 1e9*self.experiment.τDiff_i_rmax))
         print("  Diffusion time (dr): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_dr,1e9*self.experiment.τDiff_i_dr))
 
-        print("  Thermalization Time: {0:.1} ps".format(self.experiment.τei_Equilibration*1e12))
+        print("  Thermalization Times: {0:.1} ps  {0:.1} ps".format(self.experiment.τei_Equilibration*1e12, self.experiment.τie_Equilibration*1e12))
 
     def solve_TTM(self, dt=None, tmax=None):
         """
@@ -176,9 +195,12 @@ class TwoTemperatureModel():
             
             ke = self.ke(self.n_e, self.n_i, self.Te,self.Ti)
             ki = self.ki(self.n_e, self.n_i, self.Te,self.Ti)
-            G  = self.G (self.n_e, self.n_i, self.Te,self.Ti)[:-1]
-            Ce = params.electron_heat_capacity(self.n_e)[:-1]
-            Ci = params.ion_heat_capacity(self.n_i)[:-1]
+            Gei_a, Gie_a  = self.G(self.n_e, self.n_i, self.Te,self.Ti)
+
+            Gei, Gie = Gei_a[:-1], Gie_a[:-1]
+
+            Ce = self.params.electron_heat_capacity(self.n_e)[:-1]
+            Ci = self.params.ion_heat_capacity(self.n_i)[:-1]
 
             Te_flux = ke * 2*π*self.grid.r * self.grad_T(self.Te) #Cylindrical flux first order
             Ti_flux = ki * 2*π*self.grid.r * self.grad_T(self.Ti)
@@ -187,12 +209,12 @@ class TwoTemperatureModel():
             # Note- γ is a CONSTANT!!! Broken to make it a function of r right now!
             net_flux_e = (Te_flux[1:] - Te_flux[:-1]) 
             Te_new = self.Te[:-1] + self.dt/Ce * (
-                    net_flux_e/ self.grid.cell_volumes - G *(self.Te - self.Ti)[:-1]
+                    net_flux_e/ self.grid.cell_volumes - Gei *(self.Te - self.Ti)[:-1]
                     )
 
             net_flux_i = (Ti_flux[1:] - Ti_flux[:-1]) 
             Ti_new = self.Ti[:-1] + self.dt/Ci * (
-                    net_flux_i/ self.grid.cell_volumes + G *(self.Te - self.Ti)[:-1]
+                    net_flux_i/ self.grid.cell_volumes + Gie *(self.Te - self.Ti)[:-1]
                     )
 
             # Update temperatures
