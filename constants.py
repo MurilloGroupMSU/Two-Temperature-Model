@@ -11,6 +11,7 @@ ee = 1.6e-19  # Elementary charge [C]
 ε_0 = 8.85e-12  # Vacuum permittivity [F/m]
 k_B = 1.38e-23  # Boltzmann constant [J/K]
 hbar=  6.62607015e-34 # Planck [J/s]
+σ_SB = 5.670374e-8   # Stefan Boltzmann W m^-2 K^-4
 
 # Conversion units
 # Multiply variable by this to go from first unit to second

@@ -83,6 +83,9 @@ class Physical_Parameters():
         λDe = np.sqrt(ε_0*k_B*Te/(ee**2*n_e) )
         return λDe
 
+    @staticmethod
+    def electron_plasma_frequency(n_e):
+        return np.sqrt( n_e*ee**2 / (m_e*ε_0) )
 
     # Class Methods
     @classmethod
@@ -124,9 +127,6 @@ class Physical_Parameters():
         vthe = cls.electron_thermal_velocity(Te)
         λDe = hbar/ (2*m_e*vthe)
         return λDe
-
-
-
 
 class Plasma_Formulary_Physics(Physical_Parameters):
     """
@@ -258,9 +258,10 @@ class JT_GMS_Physics(Physical_Parameters):
             ke: [k_B /(ms)]
         """
         vthe = cls.electron_thermal_velocity(Te)
+        τee  = cls.ee_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti)
         τei  = cls.ei_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti)
         Ce   = cls.electron_heat_capacity(n_e, Te)
-        ke = 1/3 * vthe**2 *τei * Ce 
+        ke = 1/3 * vthe**2 *τee * Ce  #if τee >> τei, otherwise some reciprocal addition 
         return ke
 
     @classmethod
@@ -312,12 +313,46 @@ class JT_GMS_Physics(Physical_Parameters):
         
         λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
 
-        vth_e = k_B*Te/m_e
+        vth_e = np.sqrt(k_B*Te/m_e)
 
         unit_conversion = (4*π*ε_0)**2
         τei = unit_conversion* (3 * m_i * m_e) / (4 * np.sqrt(2*π)*n_i*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2 )**(3/2)
 
         return τei
+    
+    @classmethod   
+    def ee_relaxation_time(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Based on J-T paper
+        CHECK WHAT T?????????  
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            τei relaxation time [s]
+
+        """
+        vth_e = np.sqrt(k_B*Te/m_e)
+        λD = cls.electron_Debye_length(n_e, Te)
+        ωp = cls.electron_plasma_frequency(n_e)
+        bmax = vth_e/ωp
+
+        bmin = np.max([Z_i*ee**2/(k_B*Te), hbar/(np.sqrt(m_e*k_B*Te))])  ### CHECK WHAT T?????????        
+        # print("bmin ", bmin)
+        # print("bmax ", bmax)
+
+
+        lnΛ = 1#0.5*np.log(1+bmax**2/bmin**2) # effectively logΛ
+        # print("lnΛ = ", lnΛ)
+
+        unit_conversion = (4*π*ε_0)**2
+        τee = unit_conversion* (3 * m_e**2) / (2 * np.sqrt(2)*π*n_e*ee**4*lnΛ ) * vth_e**3
+
+        return τee
 
     @classmethod
     def electron_diffusivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
