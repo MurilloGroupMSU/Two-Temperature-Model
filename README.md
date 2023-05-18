@@ -1,6 +1,6 @@
 
 ____
-# UCLA-MSU Two-Temperature-Model
+# UCLA-MSU (CLAMS) Two-Temperature-Model
 _____
 
 Code, papers and notes for the UCLA-MSU TTM are stored here.
