@@ -226,8 +226,10 @@ class JT_GMS_Physics(Physical_Parameters):
         Args: 
             n_e: electron number density [1/m^3]
         """
-        Ce = 3/2 * k_B * n_e # Electron ideal gas heat capacity
-        return Ce
+        Ce_classical = 3/2 * k_B * n_e # Electron ideal gas heat capacity
+        
+        # Ce = π**2 / 3 * cls.Theta(n_e, Te)
+        return Ce_classical
 
     @staticmethod
     def ion_heat_capacity(n_i):
@@ -257,13 +259,11 @@ class JT_GMS_Physics(Physical_Parameters):
         Returns:
             G: electron-ion coupling 
         """
-        Ce = cls.electron_heat_capacity(n_e)
-        Ci = cls.ion_heat_capacity(n_i)
-        τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
-                
-        Gei = Ce/τei
-        Gie = Ci/τie
-        return Gei, Gie
+        Ce = cls.electron_heat_capacity(n_e, Te)
+        τei_e = cls.ei_relaxation_time( n_e, n_i, m_i, Z_i, Te, Ti) 
+        
+        G = Ce/τei_e
+        return G
 
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
@@ -584,7 +584,7 @@ class SMT(Physical_Parameters):
             De diffusivity [m^2/s]
         """
         ke = cls.electron_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
-        Ce = cls.electron_heat_capacity(n_e)
+        Ce = cls.electron_heat_capacity(n_e, Te)
         De = ke/Ce
         return De
 
