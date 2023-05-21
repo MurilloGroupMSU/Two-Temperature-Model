@@ -217,12 +217,12 @@ class JT_GMS_Physics(Physical_Parameters):
         μ = k_B*T*(term_1 + term_2 + term_3)
         
         return μ
-        
-    @staticmethod
-    def electron_heat_capacity(n_e):
+
+    @classmethod
+    def electron_heat_capacity(cls, n_e, Te):
         """
         Returns the electron heat capacity
-        Ideal gas
+        Free electron model modifcation to classical result
         Args: 
             n_e: electron number density [1/m^3]
         """
