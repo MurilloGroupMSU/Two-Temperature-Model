@@ -1,12 +1,13 @@
 # Two Temperature Model 
 # Solver class
-# Michael S. Murillo, Zach Johnson
+# Zach Johnson, Michael S. Murillo, Luciano Silvestri
 
 # SI units everywhere
 
 
 import numpy as np
-from physics import JT_GMS_Physics as params
+from physics import JT_GMS_Physics as jt_mod
+from physics import SMT as smt_mod
 from constants import *
 
 
@@ -15,7 +16,7 @@ class TwoTemperatureModel():
     Implements a two temperature model of a plasma as a cylinder
     """
 
-    def __init__(self, Experiment):
+    def __init__(self, Experiment, model = "SMT"):
         self.experiment = Experiment
         self.grid = Experiment.grid
 
@@ -25,6 +26,11 @@ class TwoTemperatureModel():
         self.n_i = Experiment.n_i # .copy() or leave as is?
         self.n_e = Experiment.n_e
 
+        if model == "SMT":
+            self.params = smt_mod
+        else:
+            self.params = jt_mod
+
     #Gradient Function
     def grad_T(self, T): #Gradient at boundaries. Neumann at 0, cylinder axis. 
         grad_T   = (T - np.roll(T,1))/self.grid.dr
@@ -33,21 +39,22 @@ class TwoTemperatureModel():
 
     def ke(self, n_e, n_i, Te, Ti ):
         m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
-        return params.electron_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
+        return self.params.electron_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
 
     def ki(self, n_e, n_i, Te, Ti ):
-        return 0
+        m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
+        return self.params.ion_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
 
     def G(self, n_e, n_i, Te, Ti ):
         m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
-        return params.ei_coupling_factor(n_e, n_i, m_i, Z_i, Te, Ti)
+        return self.params.ei_coupling_factor(n_e, n_i, m_i, Z_i, Te, Ti)
 
     def get_tmax(self):
         τ_κ = self.experiment.τei_Equilibration
         return 5*τ_κ
     
     def get_dt(self):
-        shortest_timescale_on_dr = np.min([self.experiment.τei_Equilibration, self.experiment.τDiff_e_dr,
+        shortest_timescale_on_dr = np.min([self.experiment.τei_Equilibration, self.experiment.τei_Equilibration, self.experiment.τDiff_e_dr,
                                            self.experiment.τDiff_e_dr]) 
         
         return 1e-1*shortest_timescale_on_dr
@@ -70,7 +77,7 @@ class TwoTemperatureModel():
         print("  Diffusion time (r_max): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_rmax, 1e9*self.experiment.τDiff_i_rmax))
         print("  Diffusion time (dr): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_dr,1e9*self.experiment.τDiff_i_dr))
 
-        print("  Thermalization Time: {0:.1} ps".format(self.experiment.τei_Equilibration*1e12))
+        print("  Thermalization Times: {0:.1} ps  {0:.1} ps".format(self.experiment.τei_Equilibration*1e12, self.experiment.τie_Equilibration*1e12))
 
     def solve_TTM(self, dt=None, tmax=None):
         """
@@ -90,8 +97,8 @@ class TwoTemperatureModel():
             ke = self.ke(self.n_e, self.n_i, self.Te,self.Ti)
             ki = self.ki(self.n_e, self.n_i, self.Te,self.Ti)
             G  = self.G (self.n_e, self.n_i, self.Te,self.Ti)[:-1]
-            Ce = params.electron_heat_capacity(self.n_e, self.Te)[:-1]
-            Ci = params.ion_heat_capacity(self.n_i)[:-1]
+            Ce = self.params.electron_heat_capacity(self.n_e, self.Te)[:-1]
+            Ci = self.params.ion_heat_capacity(self.n_i)[:-1]
 
             Te_flux = ke * 2*π*self.grid.r * self.grad_T(self.Te) #Cylindrical flux first order
             Ti_flux = ki * 2*π*self.grid.r * self.grad_T(self.Ti)

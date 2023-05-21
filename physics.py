@@ -219,17 +219,16 @@ class JT_GMS_Physics(Physical_Parameters):
         return μ
 
     @classmethod
-    def electron_heat_capacity(cls, n_e, Te):
+    def electron_heat_capacity(cls, n_e):
         """
         Returns the electron heat capacity
         Free electron model modifcation to classical result
         Args: 
             n_e: electron number density [1/m^3]
         """
-        Ce_classical = 3/2 * k_B * n_e # Electron ideal gas heat capacity
+        Ce_ideal = 3/2 * k_B * n_e # Electron ideal gas heat capacity
         
-        # Ce = π**2 / 3 * cls.Theta(n_e, Te)
-        return Ce_classical
+        return Ce_ideal
 
     @staticmethod
     def ion_heat_capacity(n_i):
