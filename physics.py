@@ -95,6 +95,10 @@ class Physical_Parameters():
         λDe = np.sqrt(ε_0*k_B*Ti/((Zi * ee)**2*ni) )
         return λDe
     
+    @staticmethod
+    def electron_plasma_frequency(n_e):
+        return np.sqrt( n_e*ee**2 / (m_e*ε_0) )
+
 
     # Class Methods
     @classmethod
@@ -140,10 +144,54 @@ class Physical_Parameters():
 
     @staticmethod
     def average_temperature(m1, T1, m2, T2):
-
         T_avg = (m1 * T2 + m2*T1)/(m1 + m2)
         return T_avg
     
+    @staticmethod
+    def Thomas_Fermi_Zbar(Z, num_density, T):
+        """
+        Finite Temperature Thomas Fermi Charge State using 
+        R.M. More, "Pressure Ionization, Resonances, and the
+        Continuity of Bound and Free States", Adv. in Atomic 
+        Mol. Phys., Vol. 21, p. 332 (Table IV).
+        
+        Args:
+            Z: atomic number
+            num_density: number density [m^-3]
+            T: temperature [K]
+        Returns:
+            Zbar: Average ionization
+        """
+
+        alpha = 14.3139
+        beta = 0.6624
+        a1 = 0.003323
+        a2 = 0.9718
+        a3 = 9.26148e-5
+        a4 = 3.10165
+        b0 = -1.7630
+        b1 = 1.43175
+        b2 = 0.31546
+        c1 = -0.366667
+        c2 = 0.983333
+        
+
+        convert = num_density*mc_to_cc*1.6726e-24
+        R = convert/Z
+        T0_in_eV = T*K_to_eV/Z**(4./3.)
+        Tf_in_eV = T0_in_eV*K_to_eV/(1 + T0_in_eV)
+
+        A = a1*T0_in_eV**a2 + a3*T0_in_eV**a4
+        B = -np.exp(b0 + b1*Tf_in_eV + b2*Tf_in_eV**7)
+        C = c1*Tf_in_eV + c2
+        Q1 = A*R**B
+        Q = (R**C + Q1**C)**(1/C)
+        x = alpha*Q**beta
+        Zbar = Z*x/(1 + x + np.sqrt(1 + 2.*x))
+        
+        return Zbar
+
+
 
 class Plasma_Formulary_Physics(Physical_Parameters):
     """
@@ -154,7 +202,7 @@ class Plasma_Formulary_Physics(Physical_Parameters):
         pass
 
 
-class JT_GMS_Physics(Physical_Parameters):
+class JT_GMS(Physical_Parameters):
     """
     Models based on two papers:
 
@@ -231,7 +279,7 @@ class JT_GMS_Physics(Physical_Parameters):
         return Ce_ideal
 
     @staticmethod
-    def ion_heat_capacity(n_i):
+    def ion_heat_capacity(n_i, Ti):
         """
         Returns the ion heat capacity
         Ideal gas
@@ -242,7 +290,7 @@ class JT_GMS_Physics(Physical_Parameters):
         return Ci
 
     @classmethod
-    def ei_coupling_factors(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+    def ei_coupling_factor(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
         Returns G, the electron-ion coupling factor
 
@@ -259,13 +307,9 @@ class JT_GMS_Physics(Physical_Parameters):
             G: electron-ion coupling 
         """
         Ce = cls.electron_heat_capacity(n_e, Te)
-        Ci = cls.ion_heat_capacity(n_i, Ti)
         τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
-        
-        Gei = Ce/τei
-        Gie = Ci/τie
-        G = Gei #Same!
-			
+
+        G = Ce/τei
         return G
 
     @classmethod
@@ -278,9 +322,10 @@ class JT_GMS_Physics(Physical_Parameters):
             ke: [k_B /(ms)]
         """
         vthe = cls.electron_thermal_velocity(Te)
-        τei, _  = cls.ei_relaxation_times(n_e, n_i, m_i, Z_i, Te, Ti)
+        τee  = cls.ee_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti)
+        τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
         Ce   = cls.electron_heat_capacity(n_e, Te)
-        ke = 1/3 * vthe**2 *τei * Ce 
+        ke = 1/3 * vthe**2 *τee * Ce  #if τee >> τei, otherwise some reciprocal addition 
         return ke
 
     @classmethod
@@ -295,7 +340,40 @@ class JT_GMS_Physics(Physical_Parameters):
         ki = 1e-40
         return ki
 
-    
+    @classmethod   
+    def ee_relaxation_time(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Based on J-T paper
+        CHECK WHAT T?????????  
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            τei relaxation time [s]
+
+        """
+        vth_e = np.sqrt(k_B*Te/m_e)
+        λD = cls.electron_Debye_length(n_e, Te)
+        ωp = cls.electron_plasma_frequency(n_e)
+        bmax = vth_e/ωp
+
+        bmin = np.max([Z_i*ee**2/(k_B*Te), hbar/(np.sqrt(m_e*k_B*Te))])  ### CHECK WHAT T?????????        
+        # print("bmin ", bmin)
+        # print("bmax ", bmax)
+
+
+        lnΛ = 1#0.5*np.log(1+bmax**2/bmin**2) # effectively logΛ
+        # print("lnΛ = ", lnΛ)
+
+        unit_conversion = (4*π*ε_0)**2
+        τee = unit_conversion* (3 * m_e**2) / (2 * np.sqrt(2)*π*n_e*ee**4*lnΛ ) * vth_e**3
+
+        return τee
+
     @classmethod   
     def ei_relaxation_times(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
@@ -330,7 +408,9 @@ class JT_GMS_Physics(Physical_Parameters):
         bref = np.sqrt(λdBe**2 + r_closest_approach**2)
         
         λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
-
+        λ = np.where(λ==0, 1e-16, λ)
+        # vth_e = k_B*Te/m_e
+        # T_avg = cls.average_temperature(m_e, Te, m_i, Ti)
         unit_conversion = (4*π*ε_0)**2
 
 
@@ -378,7 +458,7 @@ class JT_GMS_Physics(Physical_Parameters):
             Di diffusivity [m^2/s]
         """
         ki = cls.ion_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
-        Ci = cls.ion_heat_capacity(n_i)
+        Ci = cls.ion_heat_capacity(n_i, Ti)
         Di = ki/Ci
         return Di
     
@@ -462,7 +542,7 @@ class SMT(Physical_Parameters):
         return Ce
 
     @staticmethod
-    def ion_heat_capacity(n_i):
+    def ion_heat_capacity(n_i, Ti):
         """
         Returns the ion heat capacity
         Ideal gas
@@ -473,7 +553,7 @@ class SMT(Physical_Parameters):
         return Ci
 
     @classmethod
-    def ei_coupling_factors(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+    def ei_coupling_factor(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
         Returns G, the electron-ion coupling factor
 
@@ -495,10 +575,10 @@ class SMT(Physical_Parameters):
         
         Gei = Ce/τei
         Gie = Ci/τie
-        G = Gei #Same!
-			
+        # if Gei!=Gie:
+        #     print("Warning: Gei!= Gie")
+        G=Gei 
         return G
-
 
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
@@ -609,7 +689,7 @@ class SMT(Physical_Parameters):
             Di diffusivity [m^2/s]
         """
         ki = cls.ion_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
-        Ci = cls.ion_heat_capacity(n_i)
+        Ci = cls.ion_heat_capacity(n_i, Ti)
         Di = ki/Ci
         return Di
     
