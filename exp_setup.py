@@ -6,7 +6,7 @@
 
 
 import numpy as np
-from physics import JT_GMS_Physics as jt_mod
+from physics import JT_GMS as jt_mod
 from physics import SMT as smt_mod
 from constants import *
 
@@ -33,19 +33,22 @@ class Experiment():
     Initializes all physical parameters according to initial conditions of experiment.
     """
 
-    def __init__(self, grid, n0, Z_i, A, Te_initial, Ti_initial,laser_width, 
+    def __init__(self, grid, n0, Z, A, Te_initial, Ti_initial, laser_width, 
                 gas_name='Argon', model = "SMT"):
         """
         Args:
             n0: Density of gas [1/m^3] 
             Z : Ionization number of gas ## Switch to atomic number, define Zstar????
             A : Weight of gas
-            laser_width: approximate width of laser
+            Te_initial: Bulk measurement of electron temperature
+            Ti_initial: Bulk measurement of ion temperature
+            laser_width: Full width at half maximum of approximately 
+                         gaussian laser (Temperature, power???)
             gas_name: ...
 
         """
         self.grid = grid
-        self.Z_i = Z_i
+        self.Z = Z # Atomic Number of ion
         self.A = A
         self.m_i = A * m_p
         self.Te_init = Te_initial
@@ -58,12 +61,16 @@ class Experiment():
         else:
             self.params = jt_mod
         
-        self.make_n_profiles()
+        self.make_n_i_profile()
         self.make_T_profiles()
+        self.make_n_e_profile()
         self.make_physical_timescales()
 
     def make_T_profiles(self):
         """
+        NEEDS WORK
+        Zbar, ne <-> Te needs to be self-consistent
+
         Makes an initial temperature profile after laser heating for the electrons and ion.
         Currently assumes measured Temperature is based on bulk average over laser width region
         Args:
@@ -72,28 +79,54 @@ class Experiment():
             None
         """
         r = self.grid.r
-        σ = self.laser_width
-        self.Te = self.Te_init*np.exp(-r**2/(2*σ**2)) #Gaussian Laser
-        self.Ti = self.Ti_init*np.exp(-r**2/(2*σ**2))
+        print("Current Te profile not exact, needs self-consistency condition.")
+        full_width_at_half_maximum = self.laser_width
+
+        σ = np.sqrt( (full_width_at_half_maximum/2)**2/np.log(2)/2)
         
+        self.T_room = 300
+        self.Te = self.Te_init*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
+        self.Ti = self.Ti_init*np.exp(-r**2/(2*σ**2)) + self.T_room
+
         # Rescale so bulk Temperature is the initial one.
-        width_index = np.argmin(np.abs(self.grid.r - self.laser_width))
-        av_Te = self.grid.integrate_f(self.n_e[:-1]*self.Te[:-1], endpoint=width_index)/self.grid.integrate_f(self.n_e[:-1], endpoint=width_index)
+        width_index = np.argmin(np.abs(self.grid.r - 0.5*full_width_at_half_maximum))
+        # av_Te = self.grid.integrate_f(self.n_e[:-1]*self.Te[:-1], endpoint=width_index)/self.grid.integrate_f(self.n_e[:-1], endpoint=width_index)
         av_Ti = self.grid.integrate_f(self.n_i[:-1]*self.Ti[:-1], endpoint=width_index)/self.grid.integrate_f(self.n_i[:-1], endpoint=width_index)
         
-        self.Te *= self.Te_init/av_Te
         self.Ti *= self.Ti_init/av_Ti
+        self.Te *= self.Ti_init/av_Ti #Using ion rescale, not right!
+        
 
-    def make_n_profiles(self):
+    def set_ionization(self):
         """
-        Makes an initial temperature profile after laser heating for the electrons and ion
+        Sets the ionization profile of the ion using TF AA fit.
+        Args:
+            None
+        Returns:
+            None
+        """
+        self.Zbar = self.params.Thomas_Fermi_Zbar(self.Z, self.n_i, self.Te)
+
+    def make_n_i_profile(self):
+        """
+        Makes an initial temperature profile after laser heating for the ions
         Args:
             None
         Returns:
             None
         """
         self.n_i = self.n0 * np.ones(self.grid.N)
-        self.n_e = self.n_i * self.Z_i
+    
+    def make_n_e_profile(self):
+        """
+        Makes an initial temperature profile after laser heating for the electrons 
+        Args:
+            None
+        Returns:
+            None
+        """
+        self.set_ionization()
+        self.n_e = self.n_i * self.Zbar #profile, heterogeneous n_e
     
     def make_physical_timescales(self):
         """
@@ -103,12 +136,12 @@ class Experiment():
         Returns:
             None
         """
-        n_e, n_i, m_i, Z_i, Te, Ti = (self.n_e[0], self.n_i[0], self.m_i, 
-                                      self.Z_i, self.Te_init, self.Ti_init)
+        n_e, n_i, m_i, Zbar, Te, Ti = (self.n_e[0], self.n_i[0], self.m_i, 
+                                      self.Zbar[0], self.Te[0], self.Ti[0])
 
-        self.τei_Equilibration, self.τie_Equilibration = self.params.ei_relaxation_times(n_e, n_i, m_i, Z_i, Te, Ti) 
-        self.τDiff_e_rmax = self.grid.r_max**2 / self.params.electron_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
-        self.τDiff_i_rmax = self.grid.r_max**2 / self.params.ion_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        self.τei_Equilibration, self.τie_Equilibration = self.params.ei_relaxation_times(n_e, n_i, m_i, Zbar, Te, Ti) 
+        self.τDiff_e_rmax = self.grid.r_max**2 / self.params.electron_diffusivity(n_e, n_i, m_i, Zbar, Te, Ti)
+        self.τDiff_i_rmax = self.grid.r_max**2 / self.params.ion_diffusivity(n_e, n_i, m_i, Zbar, Te, Ti)
         self.τDiff_e_dr = self.τDiff_e_rmax * (self.grid.dr / self.grid.r_max)**2
         self.τDiff_i_dr = self.τDiff_i_rmax * (self.grid.dr / self.grid.r_max)**2
     
