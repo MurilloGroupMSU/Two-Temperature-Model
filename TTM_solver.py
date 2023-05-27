@@ -6,7 +6,7 @@
 
 
 import numpy as np
-from physics import JT_GMS_Physics as jt_mod
+from physics import JT_GMS as jt_mod
 from physics import SMT as smt_mod
 from constants import *
 
@@ -26,6 +26,8 @@ class TwoTemperatureModel():
         self.n_i = Experiment.n_i # .copy() or leave as is?
         self.n_e = Experiment.n_e
 
+        self.Zbar = Experiment.Zbar
+
         if model == "SMT":
             self.params = smt_mod
         else:
@@ -37,17 +39,17 @@ class TwoTemperatureModel():
         grad_T[0]=0 
         return grad_T
 
-    def ke(self, n_e, n_i, Te, Ti ):
-        m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
-        return self.params.electron_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
+    def ke(self, n_e, n_i, Zbar, Te, Ti ):
+        m_i = self.experiment.m_i
+        return self.params.electron_thermal_conductivity( n_e, n_i, m_i, Zbar, Te, Ti)
 
-    def ki(self, n_e, n_i, Te, Ti ):
-        m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
-        return self.params.ion_thermal_conductivity( n_e, n_i, m_i, Z_i, Te, Ti)
+    def ki(self, n_e, n_i, Zbar, Te, Ti ):
+        m_i = self.experiment.m_i
+        return self.params.ion_thermal_conductivity( n_e, n_i, m_i, Zbar, Te, Ti)
 
-    def G(self, n_e, n_i, Te, Ti ):
-        m_i, Z_i = self.experiment.m_i, self.experiment.Z_i 
-        return self.params.ei_coupling_factor(n_e, n_i, m_i, Z_i, Te, Ti)
+    def G(self, n_e, n_i, Zbar, Te, Ti ):
+        m_i = self.experiment.m_i
+        return self.params.ei_coupling_factor(n_e, n_i, m_i, Zbar, Te, Ti)
 
     def get_tmax(self):
         τ_κ = self.experiment.τei_Equilibration
@@ -94,30 +96,31 @@ class TwoTemperatureModel():
         for t in self.t_list[:-1]:
             # Calculate new temperatures using explicit Euler method, finite volume, and relaxation
             
-            ke = self.ke(self.n_e, self.n_i, self.Te,self.Ti)
-            ki = self.ki(self.n_e, self.n_i, self.Te,self.Ti)
-            G  = self.G (self.n_e, self.n_i, self.Te,self.Ti)[:-1]
+            ke = self.ke(self.n_e, self.n_i, self.Zbar, self.Te,self.Ti)
+            ki = self.ki(self.n_e, self.n_i, self.Zbar, self.Te,self.Ti)
+            G  = self.G (self.n_e, self.n_i, self.Zbar, self.Te,self.Ti) 
             Ce = self.params.electron_heat_capacity(self.n_e, self.Te)[:-1]
-            Ci = self.params.ion_heat_capacity(self.n_i)[:-1]
+            Ci = self.params.ion_heat_capacity(self.n_i, self.Ti)[:-1]
+
 
             Te_flux = ke * 2*π*self.grid.r * self.grad_T(self.Te) #Cylindrical flux first order
             Ti_flux = ki * 2*π*self.grid.r * self.grad_T(self.Ti)
             
-            
             # Note- γ is a CONSTANT!!! Broken to make it a function of r right now!
             net_flux_e = (Te_flux[1:] - Te_flux[:-1]) 
             Te_new = self.Te[:-1] + self.dt/Ce * (
-                    net_flux_e/ self.grid.cell_volumes - G *(self.Te - self.Ti)[:-1]
+                    net_flux_e/ self.grid.cell_volumes - (G*(self.Te - self.Ti))[:-1]
                     )
 
             net_flux_i = (Ti_flux[1:] - Ti_flux[:-1]) 
             Ti_new = self.Ti[:-1] + self.dt/Ci * (
-                    net_flux_i/ self.grid.cell_volumes + G *(self.Te - self.Ti)[:-1]
+                    net_flux_i/ self.grid.cell_volumes + (G *(self.Te - self.Ti))[:-1]
                     )
 
             # Update temperatures
             self.Te[:-1] = Te_new
             self.Ti[:-1] = Ti_new
+            self.experiment.make_n_e_profile()
             # Make list of temperature profiles 
             self.Te_list.append(self.Te.copy()); self.Ti_list.append(self.Ti.copy())
             
