@@ -219,7 +219,7 @@ class JT_GMS_Physics(Physical_Parameters):
         return μ
 
     @classmethod
-    def electron_heat_capacity(cls, n_e):
+    def electron_heat_capacity(cls, n_e, Te):
         """
         Returns the electron heat capacity
         Free electron model modifcation to classical result
@@ -264,7 +264,7 @@ class JT_GMS_Physics(Physical_Parameters):
         
         Gei = Ce/τei
         Gie = Ci/τie
-	G = Gei #Same!
+        G = Gei #Same!
 			
         return G
 
@@ -356,7 +356,7 @@ class JT_GMS_Physics(Physical_Parameters):
             De diffusivity [m^2/s]
         """
         ke = cls.electron_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
-        Ce = cls.electron_heat_capacity(n_e)
+        Ce = cls.electron_heat_capacity(n_e, Te)
         De = ke/Ce
         # print(ke, Ce)
         return De
@@ -451,7 +451,7 @@ class SMT(Physical_Parameters):
 
    
     @staticmethod
-    def electron_heat_capacity(n_e):
+    def electron_heat_capacity(n_e, Te):
         """
         Returns the electron heat capacity
         Ideal gas
@@ -495,7 +495,7 @@ class SMT(Physical_Parameters):
         
         Gei = Ce/τei
         Gie = Ci/τie
-	G = Gei #Same!
+        G = Gei #Same!
 			
         return G
 
