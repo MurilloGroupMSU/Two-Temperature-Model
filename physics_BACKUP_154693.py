@@ -84,6 +84,10 @@ class Physical_Parameters():
         return λDe
 
     @staticmethod
+<<<<<<< HEAD
+    def electron_plasma_frequency(n_e):
+        return np.sqrt( n_e*ee**2 / (m_e*ε_0) )
+=======
     def ion_Debye_length(ni, Ti, Zi):
         """
         Returns the ion Debye length
@@ -95,6 +99,7 @@ class Physical_Parameters():
         λDe = np.sqrt(ε_0*k_B*Ti/((Zi * ee)**2*ni) )
         return λDe
     
+>>>>>>> 0b1bb3bb42d39a807c19bf10388569fb796230c7
 
     # Class Methods
     @classmethod
@@ -137,6 +142,8 @@ class Physical_Parameters():
         λDe = hbar/ (2*m_e*vthe)
         return λDe
 
+<<<<<<< HEAD
+=======
 
     @staticmethod
     def average_temperature(m1, T1, m2, T2):
@@ -145,6 +152,7 @@ class Physical_Parameters():
         return T_avg
     
 
+>>>>>>> 0b1bb3bb42d39a807c19bf10388569fb796230c7
 class Plasma_Formulary_Physics(Physical_Parameters):
     """
     Defines physical quantities using the plasma formulary
@@ -259,13 +267,9 @@ class JT_GMS_Physics(Physical_Parameters):
             G: electron-ion coupling 
         """
         Ce = cls.electron_heat_capacity(n_e, Te)
-        Ci = cls.ion_heat_capacity(n_i, Ti)
-        τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
+        τei_e = cls.ei_relaxation_time( n_e, n_i, m_i, Z_i, Te, Ti) 
         
-        Gei = Ce/τei
-        Gie = Ci/τie
-	G = Gei #Same!
-			
+        G = Ce/τei_e
         return G
 
     @classmethod
@@ -278,9 +282,16 @@ class JT_GMS_Physics(Physical_Parameters):
             ke: [k_B /(ms)]
         """
         vthe = cls.electron_thermal_velocity(Te)
-        τei, _  = cls.ei_relaxation_times(n_e, n_i, m_i, Z_i, Te, Ti)
+<<<<<<< HEAD
+        τee  = cls.ee_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti)
+        τei  = cls.ei_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti)
         Ce   = cls.electron_heat_capacity(n_e, Te)
+        ke = 1/3 * vthe**2 *τee * Ce  #if τee >> τei, otherwise some reciprocal addition 
+=======
+        τei, _  = cls.ei_relaxation_times(n_e, n_i, m_i, Z_i, Te, Ti)
+        Ce   = cls.electron_heat_capacity(n_e)
         ke = 1/3 * vthe**2 *τei * Ce 
+>>>>>>> 0b1bb3bb42d39a807c19bf10388569fb796230c7
         return ke
 
     @classmethod
@@ -331,8 +342,24 @@ class JT_GMS_Physics(Physical_Parameters):
         
         λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
 
+<<<<<<< HEAD
+        vth_e = np.sqrt(k_B*Te/m_e)
+
+=======
+        # vth_e = k_B*Te/m_e
+        # T_avg = cls.average_temperature(m_e, Te, m_i, Ti)
+>>>>>>> 0b1bb3bb42d39a807c19bf10388569fb796230c7
         unit_conversion = (4*π*ε_0)**2
 
+<<<<<<< HEAD
+        return τei
+    
+    @classmethod   
+    def ee_relaxation_time(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Based on J-T paper
+        CHECK WHAT T?????????  
+=======
 
         τei = unit_conversion* (3 * m_i * m_e) / (4 * np.sqrt(2*π)*n_i*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
         τie = unit_conversion* (3 * m_i * m_e) / (4 * np.sqrt(2*π)*n_e*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
@@ -489,16 +516,13 @@ class SMT(Physical_Parameters):
         Returns:
             G: electron-ion coupling 
         """
-        Ce = cls.electron_heat_capacity(n_e, Te)
-        Ci = cls.ion_heat_capacity(n_i, Ti)
+        Ce = cls.electron_heat_capacity(n_e)
+        Ci = cls.ion_heat_capacity(n_i)
         τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
         
         Gei = Ce/τei
         Gie = Ci/τie
-	G = Gei #Same!
-			
-        return G
-
+        return Gei, Gie
 
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
@@ -543,6 +567,7 @@ class SMT(Physical_Parameters):
     def ei_relaxation_times(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
         Returns SMT formula 21 in Stanton Murillo Phys Plasmas
+>>>>>>> 0b1bb3bb42d39a807c19bf10388569fb796230c7
         Args:
             n_e: e number density [1/m^3]
             n_i: ion number density [1/m^3]
@@ -554,6 +579,25 @@ class SMT(Physical_Parameters):
             τei relaxation time [s]
 
         """
+<<<<<<< HEAD
+        vth_e = np.sqrt(k_B*Te/m_e)
+        λD = cls.electron_Debye_length(n_e, Te)
+        ωp = cls.electron_plasma_frequency(n_e)
+        bmax = vth_e/ωp
+
+        bmin = np.max([Z_i*ee**2/(k_B*Te), hbar/(np.sqrt(m_e*k_B*Te))])  ### CHECK WHAT T?????????        
+        # print("bmin ", bmin)
+        # print("bmax ", bmax)
+
+
+        lnΛ = 1#0.5*np.log(1+bmax**2/bmin**2) # effectively logΛ
+        # print("lnΛ = ", lnΛ)
+
+        unit_conversion = (4*π*ε_0)**2
+        τee = unit_conversion* (3 * m_e**2) / (2 * np.sqrt(2)*π*n_e*ee**4*lnΛ ) * vth_e**3
+
+        return τee
+=======
         charge_factor = (  - Z_i * ee**2/( 4 *  π * ε_0) )**2
         mass_factor = np.sqrt(m_e *  m_i)/( m_i + m_e)**(3/2)
         T_avg = cls.average_temperature(m_e, Te, m_i, Ti)
@@ -570,6 +614,7 @@ class SMT(Physical_Parameters):
 
         return 1/nu_ei, 1/nu_ie
     
+>>>>>>> 0b1bb3bb42d39a807c19bf10388569fb796230c7
 
     @classmethod
     def electron_diffusivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
