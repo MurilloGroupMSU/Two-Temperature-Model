@@ -259,13 +259,9 @@ class JT_GMS_Physics(Physical_Parameters):
             G: electron-ion coupling 
         """
         Ce = cls.electron_heat_capacity(n_e, Te)
-        Ci = cls.ion_heat_capacity(n_i, Ti)
-        τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
+        τei_e = cls.ei_relaxation_time( n_e, n_i, m_i, Z_i, Te, Ti) 
         
-        Gei = Ce/τei
-        Gie = Ci/τie
-	G = Gei #Same!
-			
+        G = Ce/τei_e
         return G
 
     @classmethod
@@ -279,7 +275,7 @@ class JT_GMS_Physics(Physical_Parameters):
         """
         vthe = cls.electron_thermal_velocity(Te)
         τei, _  = cls.ei_relaxation_times(n_e, n_i, m_i, Z_i, Te, Ti)
-        Ce   = cls.electron_heat_capacity(n_e, Te)
+        Ce   = cls.electron_heat_capacity(n_e)
         ke = 1/3 * vthe**2 *τei * Ce 
         return ke
 
@@ -331,6 +327,8 @@ class JT_GMS_Physics(Physical_Parameters):
         
         λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
 
+        # vth_e = k_B*Te/m_e
+        # T_avg = cls.average_temperature(m_e, Te, m_i, Ti)
         unit_conversion = (4*π*ε_0)**2
 
 
@@ -489,16 +487,13 @@ class SMT(Physical_Parameters):
         Returns:
             G: electron-ion coupling 
         """
-        Ce = cls.electron_heat_capacity(n_e, Te)
-        Ci = cls.ion_heat_capacity(n_i, Ti)
+        Ce = cls.electron_heat_capacity(n_e)
+        Ci = cls.ion_heat_capacity(n_i)
         τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
         
         Gei = Ce/τei
         Gie = Ci/τie
-	G = Gei #Same!
-			
-        return G
-
+        return Gei, Gie
 
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):

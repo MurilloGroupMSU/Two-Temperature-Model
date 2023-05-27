@@ -1,12 +1,13 @@
 # Two Temperature Model 
 # Experimental Setup
-# Michael S. Murillo, Zach Johnson
+# Zach Johnson, Michael S. Murillo, Luciano Silvestri
 
 # SI units everywhere
 
 
 import numpy as np
-from physics import JT_GMS_Physics as params
+from physics import JT_GMS_Physics as jt_mod
+from physics import SMT as smt_mod
 from constants import *
 
 class Cylindrical_Grid():
@@ -32,7 +33,8 @@ class Experiment():
     Initializes all physical parameters according to initial conditions of experiment.
     """
 
-    def __init__(self, grid, n0, Z_i, A, Te_initial, Ti_initial,laser_width, gas_name='Argon'):
+    def __init__(self, grid, n0, Z_i, A, Te_initial, Ti_initial,laser_width, 
+                gas_name='Argon', model = "SMT"):
         """
         Args:
             n0: Density of gas [1/m^3] 
@@ -51,6 +53,11 @@ class Experiment():
         self.laser_width = laser_width
         self.n0 = n0 # Density- may change this variable later
 
+        if model == "SMT":
+            self.params = smt_mod
+        else:
+            self.params = jt_mod
+        
         self.make_n_profiles()
         self.make_T_profiles()
         self.make_physical_timescales()
@@ -99,9 +106,9 @@ class Experiment():
         n_e, n_i, m_i, Z_i, Te, Ti = (self.n_e[0], self.n_i[0], self.m_i, 
                                       self.Z_i, self.Te_init, self.Ti_init)
 
-        self.τei_Equilibration = params.ei_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti) 
-        self.τDiff_e_rmax = self.grid.r_max**2 / params.electron_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
-        self.τDiff_i_rmax = self.grid.r_max**2 / params.ion_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        self.τei_Equilibration, self.τie_Equilibration = self.params.ei_relaxation_times(n_e, n_i, m_i, Z_i, Te, Ti) 
+        self.τDiff_e_rmax = self.grid.r_max**2 / self.params.electron_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        self.τDiff_i_rmax = self.grid.r_max**2 / self.params.ion_diffusivity(n_e, n_i, m_i, Z_i, Te, Ti)
         self.τDiff_e_dr = self.τDiff_e_rmax * (self.grid.dr / self.grid.r_max)**2
         self.τDiff_i_dr = self.τDiff_i_rmax * (self.grid.dr / self.grid.r_max)**2
     
