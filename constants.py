@@ -17,3 +17,4 @@ hbar=  6.62607015e-34 # Planck [J/s]
 K_to_eV = k_B / ee # Kelvin to eV
 J_to_eV = 1/ee  # Joule to eV
 mc_to_cc = 1e-6 # m^-3 to 1/cc
+erg_to_J = 1e-7  #erg to Joules 

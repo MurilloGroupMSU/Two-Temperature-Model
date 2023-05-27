@@ -339,12 +339,19 @@ class JT_GMS(Physical_Parameters):
         """
         ki = 1e-40
         return ki
-
     @classmethod   
     def ee_relaxation_time(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
-        Based on J-T paper
-        CHECK WHAT T?????????  
+        Returns Spitzer formula for electron-ion thermalization timescale
+
+
+        CHECK: Amiguous in paper if electron or ion T relaxation time! 
+        from "Electron-ion equilibration in a strongly coupled plasma"
+            by A. Ng, P. Celliers, * G. Xu, and A. Forsman
+        I think this is \tau_{ei}^e, meaning electron relaxation
+        Thus, G = C_e/\tau_{ei} = C_i / ( \tau_{ei} / Z )
+
+        Assumes No. 4 log Λ  in GMS paper
         Args:
             n_e: e number density [1/m^3]
             n_i: ion number density [1/m^3]
@@ -356,23 +363,24 @@ class JT_GMS(Physical_Parameters):
             τei relaxation time [s]
 
         """
-        vth_e = np.sqrt(k_B*Te/m_e)
         λD = cls.electron_Debye_length(n_e, Te)
-        ωp = cls.electron_plasma_frequency(n_e)
-        bmax = vth_e/ωp
-
-        bmin = np.max([Z_i*ee**2/(k_B*Te), hbar/(np.sqrt(m_e*k_B*Te))])  ### CHECK WHAT T?????????        
-        # print("bmin ", bmin)
-        # print("bmax ", bmax)
-
-
-        lnΛ = 1#0.5*np.log(1+bmax**2/bmin**2) # effectively logΛ
-        # print("lnΛ = ", lnΛ)
-
+        ae = cls.r_WignerSeitz(n_e)
+        bmax = np.sqrt(λD**2 + ae**2)
+        
+        vthe= cls.electron_thermal_velocity(Te)
+        λdBe = cls.electron_deBroglie_wavelength(n_e, Te)
+        r_closest_approach = ee**2 / (m_e *vthe)
+        bref = np.sqrt(λdBe**2 + r_closest_approach**2)
+        
+        λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
+        λ = np.where(λ==0, 1e-16, λ)
+        
         unit_conversion = (4*π*ε_0)**2
-        τee = unit_conversion* (3 * m_e**2) / (2 * np.sqrt(2)*π*n_e*ee**4*lnΛ ) * vth_e**3
 
+        τee = unit_conversion* (3 * m_e**2) / (16 * np.sqrt(π)*n_e*ee**4*λ ) * vthe**3
+        
         return τee
+
 
     @classmethod   
     def ei_relaxation_times(cls, n_e, n_i, m_i, Z_i, Te, Ti):
@@ -409,8 +417,7 @@ class JT_GMS(Physical_Parameters):
         
         λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
         λ = np.where(λ==0, 1e-16, λ)
-        # vth_e = k_B*Te/m_e
-        # T_avg = cls.average_temperature(m_e, Te, m_i, Ti)
+        
         unit_conversion = (4*π*ε_0)**2
 
 
@@ -583,7 +590,6 @@ class SMT(Physical_Parameters):
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
-        Based on J-T paper, Drude theory?
         Args:
 
         Returns:
