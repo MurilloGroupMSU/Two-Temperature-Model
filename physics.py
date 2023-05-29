@@ -51,25 +51,25 @@ class Physical_Parameters():
     @staticmethod
     def electron_thermal_velocity(Te):
         """
-        Returns the electron thermal velocity
+        Returns the electron thermal velocity, defined as the root mean square of total velocity
         Args: 
             T: Temperature [K]
         Returns:
             vthe: [m/s]
         """
-        vth_e = np.sqrt(k_B*Te/m_e)
+        vth_e = np.sqrt(3*k_B*Te/m_e)
         return vth_e
 
     @staticmethod
     def ion_thermal_velocity(Ti, m_i):
         """
-        Returns the ion thermal velocity
+        Returns the ion thermal velocity, defined as the root mean square of total velocity
         Args: 
             T: Temperature [K]
         Returns:
             vthi: [m/s]
         """
-        vth_i = np.sqrt(k_B*Ti/m_i)
+        vth_i = np.sqrt(3*k_B*Ti/m_i)
         return vth_i
     
     @staticmethod
@@ -99,8 +99,13 @@ class Physical_Parameters():
     def electron_plasma_frequency(n_e):
         return np.sqrt( n_e*ee**2 / (m_e*ε_0) )
 
-
     # Class Methods
+    @classmethod
+    def Fermi_velocity(cls, n, m):
+        E_F = cls.Fermi_energy(n)
+        v_F = np.sqrt(2*E_F/m)
+        return v_F
+
     @classmethod
     def Theta(cls, n, T):
         '''
@@ -132,15 +137,36 @@ class Physical_Parameters():
     @classmethod
     def electron_deBroglie_wavelength(cls, n_e, Te):
         """
-        Returns the electron de Broglie Wavelength
+        Returns the electron thermal de Broglie Wavelength
         Args: 
             n: number density [1/m^3]
             T: Temperature [K]
         """
-        vthe = cls.electron_thermal_velocity(Te)
-        λDe = hbar/ (2*m_e*vthe)
-        return λDe
+        λdB = np.sqrt(2*π)*hbar/ np.sqrt(m_e*k_B*Te)
+        return λdB
 
+    @classmethod
+    def electron_classical_quantum_wavelength(cls, n_e, Te):
+        """
+        Modified de Broglie Wavelength
+        Idea is σx σp >= hbar/2 from Heisenberg
+        σx σv me >= hbar/2
+        σv = sqrt( 3/5 vF**2  + 3 k_B Te/me  )
+        σx = hbar/2 / sqrt( 3/5 me**2 vF**2  + 3 k_B Te) 
+        
+        σx_classical = hbar/( 2 sqrt( 3 me k_B Te) )
+    
+        Thus, to get λdB, we need
+        λ = 2*sqrt(6*π)
+
+        Args: 
+            n: number density [1/m^3]
+            T: Temperature [K]
+        """
+        λdB = cls.electron_deBroglie_wavelength(n_e, Te)
+        v_F  = cls.Fermi_velocity(n_e, m_e)
+        λ = 2*np.sqrt(6*π) * hbar / np.sqrt( 3*k_B*Te/m_e + 0.6*v_F**2)/m_e
+        return λ
 
     @staticmethod
     def average_temperature(m1, T1, m2, T2):
@@ -321,9 +347,9 @@ class JT_GMS(Physical_Parameters):
         Returns:
             ke: [k_B /(ms)]
         """
-        vthe = cls.electron_thermal_velocity(Te)
+        vthe = cls.electron_thermal_velocity(Te) # root mean square so (3/2 kB Te = 1/2 me vthe^2  for classical)
         τee  = cls.ee_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti)
-        τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
+        # τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
         Ce   = cls.electron_heat_capacity(n_e, Te)
         ke = 1/3 * vthe**2 *τee * Ce  #if τee >> τei, otherwise some reciprocal addition 
         return ke
@@ -339,17 +365,41 @@ class JT_GMS(Physical_Parameters):
         """
         ki = 1e-40
         return ki
+    
+    @classmethod
+    def coulomb_logarithm(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns lnΛ, largely from GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            lnΛ Coulomb log 
+        """
+        λDb = cls.electron_Debye_length(n_e, Te)
+        ae = cls.r_WignerSeitz(n_e)
+        bmax = np.sqrt(λDb**2 + ae**2)
+
+        vthe= cls.electron_thermal_velocity(Te)
+        λ_spread = cls.electron_classical_quantum_wavelength(n_e, Te)
+        r_closest_approach = ee**2 /(4*π*ε_0) / (3*k_B*Te)
+        bmin = np.sqrt(λ_spread**2 + r_closest_approach**2)
+        lnΛ = 0.5*np.log(1 + bmax**2/bmin**2) # effectively logΛ
+        lnΛ = np.where(lnΛ==0, 1e-16, lnΛ)
+
+        return lnΛ
+
+
+
     @classmethod   
     def ee_relaxation_time(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
-        Returns Spitzer formula for electron-ion thermalization timescale
-
-
-        CHECK: Amiguous in paper if electron or ion T relaxation time! 
-        from "Electron-ion equilibration in a strongly coupled plasma"
-            by A. Ng, P. Celliers, * G. Xu, and A. Forsman
-        I think this is \tau_{ei}^e, meaning electron relaxation
-        Thus, G = C_e/\tau_{ei} = C_i / ( \tau_{ei} / Z )
+        My summary of dimensional analysis τee with model-dependent numerical prefactor
+        Multiple possible factors presented, Lee_More agrees best with SMT model
 
         Assumes No. 4 log Λ  in GMS paper
         Args:
@@ -360,27 +410,25 @@ class JT_GMS(Physical_Parameters):
             Te: Electron Tempearture [K]
             Ti: Ion Tempearture [K]
         Returns:
-            τei relaxation time [s]
+            τee relaxation time [s]
 
         """
-        λD = cls.electron_Debye_length(n_e, Te)
-        ae = cls.r_WignerSeitz(n_e)
-        bmax = np.sqrt(λD**2 + ae**2)
-        
-        vthe= cls.electron_thermal_velocity(Te)
-        λdBe = cls.electron_deBroglie_wavelength(n_e, Te)
-        r_closest_approach = ee**2 / (m_e *vthe)
-        bref = np.sqrt(λdBe**2 + r_closest_approach**2)
-        
-        λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
-        λ = np.where(λ==0, 1e-16, λ)
-        
         unit_conversion = (4*π*ε_0)**2
+        τee_dimensional = unit_conversion * (k_B*Te)**(3/2)*np.sqrt(m_e) / (n_e* ee**4 ) # Only certain part of τee, based on dimensional analysis
 
-        τee = unit_conversion* (3 * m_e**2) / (16 * np.sqrt(π)*n_e*ee**4*λ ) * vthe**3
+        #Construct best guess for lnΛ
+        
+        # Possible numerical factors
+        c_GMS = 3/(2*np.sqrt(π))          # 10.1103/PhysRevE.65.036418
+        c_Lee_More = 3/(4*np.sqrt(2*π))   #Without spurious Zstar?? https://doi.org/10.1063/1.864744
+        c_Beckers  = 6*np.sqrt(3)/(16*np.sqrt(π)) # https://doi.org/10.1088/0963-0252/25/3/035010
+
+        lnΛ = cls.coulomb_logarithm(n_e, n_i, m_i, Z_i, Te, Ti)
+        τee_prefactor = c_Lee_More / lnΛ
+
+        τee = τee_prefactor * τee_dimensional 
         
         return τee
-
 
     @classmethod   
     def ei_relaxation_times(cls, n_e, n_i, m_i, Z_i, Te, Ti):
@@ -412,7 +460,8 @@ class JT_GMS(Physical_Parameters):
         
         vthe, vthi = cls.electron_thermal_velocity(Te), cls.ion_thermal_velocity(Ti, m_i)
         λdBe = cls.electron_deBroglie_wavelength(n_e, Te)
-        r_closest_approach = Z_i* ee**2 / (m_e *vthe)
+        r_closest_approach = Z_i* ee**2 /(4*π*ε_0) / (m_e *vthe**2)
+
         bref = np.sqrt(λdBe**2 + r_closest_approach**2)
         
         λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
@@ -420,9 +469,8 @@ class JT_GMS(Physical_Parameters):
         
         unit_conversion = (4*π*ε_0)**2
 
-
-        τei = unit_conversion* (3 * m_i * m_e) / (4 * np.sqrt(2*π)*n_i*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
-        τie = unit_conversion* (3 * m_i * m_e) / (4 * np.sqrt(2*π)*n_e*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
+        τei = unit_conversion* ( m_i * m_e) / (4 * np.sqrt(6*π)*n_i*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
+        τie = unit_conversion* ( m_i * m_e) / (4 * np.sqrt(6*π)*n_e*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
         
         return τei, τie
 
@@ -479,6 +527,9 @@ class SMT(Physical_Parameters):
 
     @classmethod
     def effective_screening_length(cls, ne, Te, ni, Ti, Zi):
+        """
+        Formula 4-5 in e-SMT
+        """
 
         lambda_i = cls.ion_Debye_length(ni, Ti, Zi)
         lambda_e = cls.electron_Debye_length(ne, Te)
@@ -489,15 +540,18 @@ class SMT(Physical_Parameters):
         return lambda_eff
     
     @classmethod
-    def plasma_parameter(cls, ne, Te, ni, mi, Ti, Zi):
-        
-        T_avg = cls.average_temperature(m_e, Te, mi, Ti)
+    def gij_plasma_parameter(cls, ne, Te, ni, Ti, mi, Zi, Tij, Zij):
+        """
+        Args:
+            Tij: av temp of two species i, j
+            Zij: Zi*Zj
+        """
         
         lambda_eff = cls.effective_screening_length(ne, Te, ni, Ti, Zi)
 
-        g = ( Zi**2 * ee**2/( 4 *  π * ε_0) ) * 1.0/ (k_B * T_avg * lambda_eff)
+        gij = Zij * ee**2/( 4 *  π * ε_0)  / (k_B * Tij * lambda_eff)
 
-        return g
+        return gij
     
     @staticmethod
     def collision_integral(n, m, g):
@@ -590,14 +644,16 @@ class SMT(Physical_Parameters):
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
+        kee (not full k) from e-SMT paper
         Args:
 
         Returns:
             ke: [k_B /(ms)]
         """
         num = 75 * k_B * (k_B * Te)**(5/2)
-        g = cls.plasma_parameter(n_e, Te, n_i, m_i, Ti, Z_i)
-        K22 = cls.collision_integral(2,2,g)
+        Tij, Zij = Te, 1
+        gee = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Z_i, Tij, Zij) #Awkward last arguments
+        K22 = cls.collision_integral(2, 2, gee)
         
         charge_factor = ( ee**2/( 4 *  π * ε_0) )**2
         denom = 64 * np.sqrt(π * m_e) *charge_factor*K22 
@@ -615,8 +671,9 @@ class SMT(Physical_Parameters):
             ki: [k_B /(ms)]
         """
         num = 75 * k_B * (k_B * Ti)**(5/2)
-        g = cls.plasma_parameter(n_e, Te, n_i, m_i, Ti, Z_i)
-        K22 = cls.collision_integral(2,2,g)
+        Tij, Zij = Ti, Z_i**2
+        gii = cls.gij_plasma_parameter(n_e, Te, n_i, T_i, m_i, Z_i, Tij, Zij)
+        K22 = cls.collision_integral(2,2,gii)
 
         charge_factor = (  Z_i**2 * ee**2/( 4 *  π * ε_0) )**2
         denom = 64 * np.sqrt(π * m_i) *charge_factor*K22 
@@ -646,9 +703,11 @@ class SMT(Physical_Parameters):
         temp_factor = 1.0/(k_B * T_avg)**(3/2)
         Phi = charge_factor * mass_factor * temp_factor
 
-        g = cls.plasma_parameter(n_e, Te, n_i, m_i, Ti, Z_i)
+        Tij = cls.average_temperature(m_e, Te, mi, Ti)
+        Zij = Z_i
+        gei = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Ti, Z_i, Tij, Zij)
 
-        K11 = cls.collision_integral(1,1,g)
+        K11 = cls.collision_integral(1,1,gei)
 
         nu = 128.0/3.0 * np.sqrt(np.pi)/2**(3/2) * Phi * K11
         nu_ei =  n_i * nu
