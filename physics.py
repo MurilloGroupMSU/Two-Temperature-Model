@@ -142,7 +142,8 @@ class Physical_Parameters():
             n: number density [1/m^3]
             T: Temperature [K]
         """
-        λdB = np.sqrt(2*π)*hbar/ np.sqrt(m_e*k_B*Te)
+        # λdB = np.sqrt(2*π)*hbar/ np.sqrt(m_e*k_B*Te) # Actual deBroglie wavelength
+        λdB = hbar /2 /np.sqrt( k_B*Te*m_e ) # from GMS
         return λdB
 
     @classmethod
@@ -163,9 +164,12 @@ class Physical_Parameters():
             n: number density [1/m^3]
             T: Temperature [K]
         """
-        λdB = cls.electron_deBroglie_wavelength(n_e, Te)
+        # λdB = cls.electron_deBroglie_wavelength(n_e, Te)
         v_F  = cls.Fermi_velocity(n_e, m_e)
-        λ = 2*np.sqrt(6*π) * hbar / np.sqrt( 3*k_B*Te/m_e + 0.6*v_F**2)/m_e
+        # λ = 2*np.sqrt(6*π) * hbar / np.sqrt( 3*k_B*Te/m_e + 0.6*v_F**2)/m_e
+        λ = np.sqrt(3) * hbar / 2 /np.sqrt( 3*k_B*Te/m_e + 0.6*v_F**2)/m_e
+        
+        # λ = hbar /2 /np.sqrt( k_B*Te*m_e ) # Classical
         return λ
 
     @staticmethod
@@ -386,7 +390,7 @@ class JT_GMS(Physical_Parameters):
 
         vthe= cls.electron_thermal_velocity(Te)
         λ_spread = cls.electron_classical_quantum_wavelength(n_e, Te)
-        r_closest_approach = ee**2 /(4*π*ε_0) / (3*k_B*Te)
+        r_closest_approach = ee**2 /(4*π*ε_0) / (3/4*k_B*Te) # Assumes 90 degree deflection. Head-on is half this
         bmin = np.sqrt(λ_spread**2 + r_closest_approach**2)
         lnΛ = 0.5*np.log(1 + bmax**2/bmin**2) # effectively logΛ
         lnΛ = np.where(lnΛ==0, 1e-16, lnΛ)
