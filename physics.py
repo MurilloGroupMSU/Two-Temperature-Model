@@ -166,7 +166,7 @@ class Physical_Parameters():
         """
         # λdB = cls.electron_deBroglie_wavelength(n_e, Te)
         v_F  = cls.Fermi_velocity(n_e, m_e)
-        # λ = 2*np.sqrt(6*π) * hbar / np.sqrt( 3*k_B*Te/m_e + 0.6*v_F**2)/m_e
+        # λ = np.sqrt(6*π) * hbar / np.sqrt( 3*k_B*Te/m_e + 0.6*v_F**2)/m_e
         λ = np.sqrt(3) * hbar / 2 /np.sqrt( 3*k_B*Te/m_e + 0.6*v_F**2)/m_e
         
         # λ = hbar /2 /np.sqrt( k_B*Te*m_e ) # Classical
@@ -707,7 +707,7 @@ class SMT(Physical_Parameters):
         temp_factor = 1.0/(k_B * T_avg)**(3/2)
         Phi = charge_factor * mass_factor * temp_factor
 
-        Tij = cls.average_temperature(m_e, Te, mi, Ti)
+        Tij = cls.average_temperature(m_e, Te, m_i, Ti)
         Zij = Z_i
         gei = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Ti, Z_i, Tij, Zij)
 
