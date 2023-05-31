@@ -676,7 +676,7 @@ class SMT(Physical_Parameters):
         """
         num = 75 * k_B * (k_B * Ti)**(5/2)
         Tij, Zij = Ti, Z_i**2
-        gii = cls.gij_plasma_parameter(n_e, Te, n_i, T_i, m_i, Z_i, Tij, Zij)
+        gii = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Z_i, Tij, Zij)
         K22 = cls.collision_integral(2,2,gii)
 
         charge_factor = (  Z_i**2 * ee**2/( 4 *  π * ε_0) )**2
@@ -709,7 +709,7 @@ class SMT(Physical_Parameters):
 
         Tij = cls.average_temperature(m_e, Te, m_i, Ti)
         Zij = Z_i
-        gei = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Ti, Z_i, Tij, Zij)
+        gei = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Z_i, Tij, Zij)
 
         K11 = cls.collision_integral(1,1,gei)
 
