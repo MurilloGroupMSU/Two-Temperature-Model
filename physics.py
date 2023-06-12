@@ -594,7 +594,6 @@ class SMT(Physical_Parameters):
             
         return Knm
 
-   
     @staticmethod
     def electron_heat_capacity(n_e, Te):
         """
@@ -668,7 +667,7 @@ class SMT(Physical_Parameters):
     @classmethod
     def ion_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
         """
-        Not Implemented yet
+        Same as electron thermal conductivity (with appropriate masses, charges), from either SMT paper
         Args:
 
         Returns:
@@ -685,6 +684,34 @@ class SMT(Physical_Parameters):
         ki = num/denom
 
         return 1e-40
+
+    @classmethod
+    def total_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Full thermal conductivity from approximate Eq. 18 of e-SMT
+        Args:
+
+        Returns:
+            ke: [k_B /(ms)]
+        """
+        num = 75 * k_B * (k_B * Te)**(5/2)
+        Tee, Zee = Te, 1
+        Tei, Zei = cls.average_temperature(m_e, Te, m_i, Ti), Z_i
+        gee = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Z_i, Tee, Zee) #Awkward last arguments
+        gei = cls.gij_plasma_parameter(n_e, Te, n_i, Ti, m_i, Z_i, Tei, Zei) #Awkward last arguments
+        
+        K11_ei = cls.collision_integral(1, 1, gei)
+        K12_ei = cls.collision_integral(1, 2, gei)
+        K13_ei = cls.collision_integral(1, 3, gei)
+        K22_ee = cls.collision_integral(2, 2, gee)
+
+        Λ = Z_i*(25*K11_ei - 20*K12_ei + 4*K13_ei) + np.sqrt(8)*K22_ee
+        
+        charge_factor = ( ee**2/( 4 *  π * ε_0) )**2
+        denom = 16 * np.sqrt(2* π * m_e) *charge_factor* Λ 
+
+        κ = num/denom
+        return κ
 
     @classmethod   
     def ei_relaxation_times(cls, n_e, n_i, m_i, Z_i, Te, Ti):

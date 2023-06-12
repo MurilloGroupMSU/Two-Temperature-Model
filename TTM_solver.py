@@ -79,7 +79,7 @@ class TwoTemperatureModel():
         print("  Diffusion time (r_max): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_rmax, 1e9*self.experiment.τDiff_i_rmax))
         print("  Diffusion time (dr): e:{0:.1e} ns, i:{1:.1e} ns ".format(1e9*self.experiment.τDiff_e_dr,1e9*self.experiment.τDiff_i_dr))
 
-        print("  Thermalization Times: {0:.1} ps  {0:.1} ps".format(self.experiment.τei_Equilibration*1e12, self.experiment.τie_Equilibration*1e12))
+        print("  Thermalization Times: {0:.2e} ps  {0:.2e} ps".format(self.experiment.τei_Equilibration*1e12, self.experiment.τie_Equilibration*1e12))
 
     def solve_TTM(self, dt=None, tmax=None):
         """
