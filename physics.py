@@ -522,6 +522,252 @@ class JT_GMS(Physical_Parameters):
         return Di
     
 
+class Fraley(Physical_Parameters):
+    """
+    Models based on paper:
+
+    'Thermonuclear burn characteristics of compressed deuterium‐tritium microspheres'
+    G. S. Fraley; E. J. Linnebur; R. J. Mason; ... et. al
+    """
+
+    def __init__(self):
+        """
+        """
+
+    @classmethod
+    def electron_heat_capacity(cls, n_e, Te):
+        """
+        Returns the electron heat capacity
+        Free electron model modifcation to classical result
+        Args: 
+            n_e: electron number density [1/m^3]
+        """
+        Ce_ideal = 3/2 * k_B * n_e # Electron ideal gas heat capacity
+        
+        return Ce_ideal
+
+    @staticmethod
+    def ion_heat_capacity(n_i, Ti):
+        """
+        Returns the ion heat capacity
+        Ideal gas
+        Args: 
+            n_i: electron number density [1/m^3]
+        """
+        Ci = 3/2 * k_B * n_i # Electron ideal gas heat capacity
+        return Ci
+
+    @classmethod
+    def ei_coupling_factor(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns G, the electron-ion coupling factor
+
+        CHECK: See ei_relaxation_time note for possible amiguity
+
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            G: electron-ion coupling 
+        """
+        Ce = cls.electron_heat_capacity(n_e, Te)
+        
+
+        G = Ce * veq
+        return G
+
+    @classmethod
+    def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Based on J-T paper, Drude theory?
+        Args:
+
+        Returns:
+            ke: [k_B /(ms)]
+        """
+        vthe = cls.electron_thermal_velocity(Te) # root mean square so (3/2 kB Te = 1/2 me vthe^2  for classical)
+        τee  = cls.ee_relaxation_time(n_e, n_i, m_i, Z_i, Te, Ti)
+        # τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 
+        Ce   = cls.electron_heat_capacity(n_e, Te)
+        ke = 1/3 * vthe**2 *τee * Ce  #if τee >> τei, otherwise some reciprocal addition 
+        return ke
+
+    @classmethod
+    def ion_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Not Implemented yet
+        Args:
+
+        Returns:
+            ki: [k_B /(ms)]
+        """
+        ki = 1e-40
+        return ki
+    
+    @classmethod
+    def coulomb_logarithm(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns lnΛ, largely from GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            lnΛ Coulomb log 
+        """
+        λDb = cls.electron_Debye_length(n_e, Te)
+        ae = cls.r_WignerSeitz(n_e)
+        bmax = np.sqrt(λDb**2 + ae**2)
+
+        vthe= cls.electron_thermal_velocity(Te)
+        λ_spread = cls.electron_classical_quantum_wavelength(n_e, Te)
+        r_closest_approach = ee**2 /(4*π*ε_0) / (3/4*k_B*Te) # Assumes 90 degree deflection. Head-on is half this
+        bmin = np.sqrt(λ_spread**2 + r_closest_approach**2)
+        lnΛ = 0.5*np.log(1 + bmax**2/bmin**2) # effectively logΛ
+        lnΛ = np.where(lnΛ==0, 1e-16, lnΛ)
+
+        return lnΛ
+
+
+    @classmethod   
+    def ee_relaxation_time(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        My summary of dimensional analysis τee with model-dependent numerical prefactor
+        Multiple possible factors presented, Lee_More agrees best with SMT model
+
+        Assumes No. 4 log Λ  in GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            τee relaxation time [s]
+
+        """
+        unit_conversion = (4*π*ε_0)**2
+        τee_dimensional = unit_conversion * (k_B*Te)**(3/2)*np.sqrt(m_e) / (n_e* ee**4 ) # Only certain part of τee, based on dimensional analysis
+
+        #Construct best guess for lnΛ
+        
+        # Possible numerical factors
+        c_GMS = 3/(2*np.sqrt(π))          # 10.1103/PhysRevE.65.036418
+        c_Lee_More = 3/(4*np.sqrt(2*π))   #Without spurious Zstar?? https://doi.org/10.1063/1.864744
+        c_Beckers  = 6*np.sqrt(3)/(16*np.sqrt(π)) # https://doi.org/10.1088/0963-0252/25/3/035010
+
+        lnΛ = cls.coulomb_logarithm(n_e, n_i, m_i, Z_i, Te, Ti)
+        τee_prefactor = c_Lee_More / lnΛ
+
+        τee = τee_prefactor * τee_dimensional 
+        
+        return τee
+
+    @classmethod
+    def lnΛei(cls,n_e, n_i, m_i, Z_i, Te, Ti):
+        A = m_i/m_p
+        second_param = np.log(3/2 * ((4*π*ε_0)/ee**2) )**(3/2)*(A/Z*k_B**3*Ti**3/π )
+        
+        return np.max((1, second_param ))
+
+    @classmethod   
+    def ei_relaxation_times(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns Spitzer formula for electron-ion thermalization timescale
+
+        CHECK: Amiguous in paper if electron or ion T relaxation time! 
+        from "Electron-ion equilibration in a strongly coupled plasma"
+            by A. Ng, P. Celliers, * G. Xu, and A. Forsman
+        I think this is \tau_{ei}^e, meaning electron relaxation
+        Thus, G = C_e/\tau_{ei} = C_i / ( \tau_{ei} / Z )
+
+        Assumes No. 4 log Λ  in GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            τei relaxation time [s]
+        """
+        unit_conversion = (4*π*ε_0)**2
+        A = m_i/m_p
+        lnΛei
+        veq = 8*np.sqrt(2*π)*np.sqrt(m_e)*ee**4/unit_conversion/3 * (Z/A)**2 * lnΛei
+
+        λD = cls.electron_Debye_length(n_e, Te)
+        ai = cls.r_WignerSeitz(n_i)
+        bmax = np.sqrt(λD**2 + ai**2)
+        
+        vthe, vthi = cls.electron_thermal_velocity(Te), cls.ion_thermal_velocity(Ti, m_i)
+        λdBe = cls.electron_deBroglie_wavelength(n_e, Te)
+        r_closest_approach = Z_i* ee**2 /(4*π*ε_0) / (m_e *vthe**2)
+
+        bref = np.sqrt(λdBe**2 + r_closest_approach**2)
+        
+        λ = 0.5*np.log(1+bmax**2/bref**2) # effectively logΛ
+        λ = np.where(λ==0, 1e-16, λ)
+        
+
+        τei = unit_conversion* ( m_i * m_e) / (4 * np.sqrt(6*π)*n_i*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
+        τie = unit_conversion* ( m_i * m_e) / (4 * np.sqrt(6*π)*n_e*Z_i**2*ee**4*λ ) * ( vthe**2  + vthi**2  )**(3/2)
+        
+        return τei, τie
+
+    @classmethod
+    def electron_diffusivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns electron thermal diffusivity D_e
+
+        Assumes No. 4 log Λ  in GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            De diffusivity [m^2/s]
+        """
+        ke = cls.electron_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        Ce = cls.electron_heat_capacity(n_e, Te)
+        De = ke/Ce
+        # print(ke, Ce)
+        return De
+
+    @classmethod
+    def ion_diffusivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):
+        """
+        Returns ion thermal diffusivity D_i
+
+        Assumes No. 4 log Λ  in GMS paper
+        Args:
+            n_e: e number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            m_i: ion mass [kg]
+            Z_i: Ion ionization 
+            Te: Electron Tempearture [K]
+            Ti: Ion Tempearture [K]
+        Returns:
+            Di diffusivity [m^2/s]
+        """
+        ki = cls.ion_thermal_conductivity(n_e, n_i, m_i, Z_i, Te, Ti)
+        Ci = cls.ion_heat_capacity(n_i, Ti)
+        Di = ki/Ci
+        return Di
+    
+
 class SMT(Physical_Parameters):
 
     def __init__(self):
