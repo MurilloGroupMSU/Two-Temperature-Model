@@ -10,6 +10,8 @@ from physics import JT_GMS as jt_mod
 from physics import SMT as smt_mod
 from constants import *
 
+from scipy.optimize import root
+
 class Cylindrical_Grid():
     """
     Simple class containing numerical grid parameters for finite volume computation
@@ -33,7 +35,7 @@ class Experiment():
     Initializes all physical parameters according to initial conditions of experiment.
     """
 
-    def __init__(self, grid, n0, Z, A, Te_initial, Ti_initial, laser_width, 
+    def __init__(self, grid, n0, Z, A, Te_experiment_initial, Ti_experiment_initial, laser_width, 
                 gas_name='Argon', model = "SMT"):
         """
         Args:
@@ -51,9 +53,10 @@ class Experiment():
         self.Z = Z # Atomic Number of ion
         self.A = A
         self.m_i = A * m_p
-        self.Te_init = Te_initial
-        self.Ti_init = Ti_initial
+        self.Te_exp_init = Te_experiment_initial
+        self.Ti_exp_init = Ti_experiment_initial
         self.laser_width = laser_width
+        self.full_width_at_half_maximum = self.laser_width
         self.n0 = n0 # Density- may change this variable later
 
         if model == "SMT":
@@ -65,6 +68,14 @@ class Experiment():
         self.make_T_profiles()
         self.make_n_e_profile()
         self.make_physical_timescales()
+
+    def get_bulk_T(self, T_profile, n_profile, max_r = None):
+        if max_r==None:
+            max_r = 0.5*self.full_width_at_half_maximum
+        
+        width_index = np.argmin(np.abs(self.grid.r - max_r))
+
+        return self.grid.integrate_f(n_profile[:-1]*T_profile[:-1], endpoint = width_index)/self.grid.integrate_f(n_profile[:-1], endpoint=width_index)
 
     def make_T_profiles(self):
         """
@@ -79,23 +90,40 @@ class Experiment():
             None
         """
         r = self.grid.r
-        print("Current Te profile not exact, needs self-consistency condition.")
-        full_width_at_half_maximum = self.laser_width
 
-        σ = np.sqrt( (full_width_at_half_maximum/2)**2/np.log(2)/2)
+        σ = np.sqrt( (self.full_width_at_half_maximum/2)**2/np.log(2)/2)
         
         self.T_room = 300
-        self.Te = self.Te_init*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
-        self.Ti = self.Ti_init*np.exp(-r**2/(2*σ**2)) + self.T_room
+        T_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
+        # self.Ti_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room
 
         # Rescale so bulk Temperature is the initial one.
-        width_index = np.argmin(np.abs(self.grid.r - 0.5*full_width_at_half_maximum))
-        # av_Te = self.grid.integrate_f(self.n_e[:-1]*self.Te[:-1], endpoint=width_index)/self.grid.integrate_f(self.n_e[:-1], endpoint=width_index)
-        av_Ti = self.grid.integrate_f(self.n_i[:-1]*self.Ti[:-1], endpoint=width_index)/self.grid.integrate_f(self.n_i[:-1], endpoint=width_index)
-        
-        self.Ti *= self.Ti_init/av_Ti
-        self.Te *= self.Ti_init/av_Ti #Using ion rescale, not right!
-        
+        def ΔT_to_min( T_max ):
+            Te_profile = T_distribution(T_max)
+            ne_profile = self.get_ionization(self.Z, self.n_i, Te_profile)
+            bulk_T = self.get_bulk_T(Te_profile, ne_profile)
+            ΔT = bulk_T - self.Te_exp_init
+            return ΔT
+
+        sol = root(ΔT_to_min, self.Te_exp_init )
+        Te_peak = float(sol.x)
+        Ti_peak = Te_peak*self.Ti_exp_init/self.Te_exp_init
+        print("Initial peak T_electron converged: ", sol.x, sol.success, sol.message)
+        print("Te_max = {0:.3e} K, Ti_max = {1:.3e} K".format(Te_peak, Ti_peak))
+        self.Te = T_distribution(Te_peak)
+        self.Ti = T_distribution(Ti_peak)
+
+
+    def get_ionization(self, Z, n_i, Te):
+        """
+        Gets the ionization profile of the ion using TF AA fit.
+        Args:
+            None
+        Returns:
+            None
+        """
+        Zbar = self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
+        return Zbar
 
     def set_ionization(self):
         """
@@ -105,7 +133,7 @@ class Experiment():
         Returns:
             None
         """
-        self.Zbar = self.params.Thomas_Fermi_Zbar(self.Z, self.n_i, self.Te)
+        self.Zbar = self.get_ionization(self.Z, self.n_i, self.Te)
 
     def make_n_i_profile(self):
         """
