@@ -6,9 +6,14 @@
 
 
 import numpy as np
+from pandas import read_csv
+from scipy.optimize import curve_fit
+
+
 from physics import JT_GMS as jt_mod
 from physics import SMT as smt_mod
 from constants import *
+
 
 from scipy.optimize import root
 
@@ -36,7 +41,7 @@ class Experiment():
     """
 
     def __init__(self, grid, n0, Z, A, Te_experiment_initial, Ti_experiment_initial, laser_width, 
-                gas_name='Argon', model = "SMT"):
+                gas_name='Argon', model = "SMT", ion_temperature_model = 'gaussian', ion_temperature_file = None):
         """
         Args:
             n0: Density of gas [1/m^3] 
@@ -57,6 +62,8 @@ class Experiment():
         self.Ti_exp_init = Ti_experiment_initial
         self.laser_width = laser_width
         self.full_width_at_half_maximum = self.laser_width
+        self.ion_temperature_model  = ion_temperature_model
+        self.ion_temperature_file = ion_temperature_file 
         self.n0 = n0 # Density- may change this variable later
 
         if model == "SMT":
@@ -77,7 +84,24 @@ class Experiment():
 
         return self.grid.integrate_f(n_profile[:-1]*T_profile[:-1], endpoint = width_index)/self.grid.integrate_f(n_profile[:-1], endpoint=width_index)
 
-    def make_T_profiles(self):
+    def make_gaussian_Ti_profile(self):
+        """
+        NEEDS WORK
+        Zbar, ne <-> Te needs to be self-consistent
+
+        Makes an initial temperature profile after laser heating for the electrons and ion.
+        Currently assumes measured Temperature is based on bulk average over laser width region
+        Args:
+            None
+        Returns:
+            None
+        """
+        self.Ti_peak = self.Te_peak*self.Ti_exp_init/self.Te_exp_init
+        self.Ti = self.T_distribution(self.Ti_peak)
+        print("Using gaussian model for Ti: Ti_max = {0:.3e} K".format(self.Ti_peak))
+
+
+    def make_gaussian_Te_profile(self):
         """
         NEEDS WORK
         Zbar, ne <-> Te needs to be self-consistent
@@ -94,24 +118,55 @@ class Experiment():
         σ = np.sqrt( (self.full_width_at_half_maximum/2)**2/np.log(2)/2)
         
         self.T_room = 300
-        T_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
+        self.T_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
         # self.Ti_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room
 
         # Rescale so bulk Temperature is the initial one.
         def ΔT_to_min( T_max ):
-            Te_profile = T_distribution(T_max)
+            Te_profile = self.T_distribution(T_max)
             ne_profile = self.get_ionization(self.Z, self.n_i, Te_profile)
             bulk_T = self.get_bulk_T(Te_profile, ne_profile)
             ΔT = bulk_T - self.Te_exp_init
             return ΔT
 
         sol = root(ΔT_to_min, self.Te_exp_init )
-        Te_peak = float(sol.x)
-        Ti_peak = Te_peak*self.Ti_exp_init/self.Te_exp_init
+        self.Te_peak = float(sol.x)
+        
         print("Initial peak T_electron converged: ", sol.x, sol.success, sol.message)
-        print("Te_max = {0:.3e} K, Ti_max = {1:.3e} K".format(Te_peak, Ti_peak))
-        self.Te = T_distribution(Te_peak)
-        self.Ti = T_distribution(Ti_peak)
+        print("Te_max = {0:.3e} K".format(self.Te_peak))
+        self.Te = self.T_distribution(self.Te_peak)
+        
+    def make_MD_Ti_profile(self):
+
+        def gaussian_Ti(r, T_peak, T_room, σ ):
+            return T_room + T_peak*np.exp(-r**2/(2*σ**2))
+            
+        dih_file = self.ion_temperature_file #"/home/zach/plasma/TTM/data/Xe5bar_DIH_profile_data.txt"
+        data = read_csv(dih_file, delim_whitespace=True, header=0 )
+
+        T_peak_fit, T_room_fit, σ_fit = curve_fit(gaussian_Ti, data['r[m]']*1e6, data['Tion[K]']*1e-3 )[0]
+        print("Ti fit params: ", T_peak_fit, T_room_fit, σ_fit)
+        self.Ti = gaussian_Ti(self.grid.r*1e6, T_peak_fit, T_room_fit, σ_fit)*1e3
+        
+
+    def make_T_profiles(self):
+        """
+        NEEDS WORK
+        Zbar, ne <-> Te needs to be self-consistent
+
+        Makes an initial temperature profile after laser heating for the electrons and ion.
+        Currently assumes measured Temperature is based on bulk average over laser width region
+        Args:
+            None
+        Returns:
+            None
+        """
+        self.make_gaussian_Te_profile()
+        
+        if self.ion_temperature_model == 'gaussian':
+            self.make_gaussian_Ti_profile()
+        elif self.ion_temperature_model == 'MD':
+            self.make_MD_Ti_profile()
 
 
     def get_ionization(self, Z, n_i, Te):
