@@ -315,6 +315,8 @@ class JT_GMS(Physical_Parameters):
         Ideal gas
         Args: 
             n_i: electron number density [1/m^3]
+        Returns:
+            Ci: ion specific heat [J / K / m^3]
         """
         Ci = 3/2 * k_B * n_i # Electron ideal gas heat capacity
         return Ci
@@ -334,7 +336,7 @@ class JT_GMS(Physical_Parameters):
             Te: Electron Tempearture [K]
             Ti: Ion Tempearture [K]
         Returns:
-            G: electron-ion coupling 
+            G: electron-ion coupling [J / K / m^3 / s]
         """
         Ce = cls.electron_heat_capacity(n_e, Te)
         τei, τie = cls.ei_relaxation_times( n_e, n_i, m_i, Z_i, Te, Ti) 

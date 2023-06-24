@@ -12,7 +12,8 @@ ee = 1.6e-19  # Elementary charge [C]
 k_B = 1.38e-23  # Boltzmann constant [J/K]
 hbar=  6.62607015e-34 # Planck [J/s]
 a_B = 5.29177210903e-11 # m
-
+α  = 0.0072973525693 # 1/c in AU
+c  = 2.99792458e8 #m/s
 
 # Conversion units
 # Multiply variable by this to go from first unit to second
@@ -20,3 +21,5 @@ K_to_eV = k_B / ee # Kelvin to eV
 J_to_eV = 1/ee  # Joule to eV
 mc_to_cc = 1e-6 # m^-3 to 1/cc
 erg_to_J = 1e-7  #erg to Joules 
+AU_energy_to_eV = 1/0.0367512 # Hartree energy to eV
+AU_time_to_s = 2.42e-17 # AU time to s

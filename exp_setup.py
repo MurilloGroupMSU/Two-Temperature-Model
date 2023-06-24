@@ -123,7 +123,7 @@ class Experiment():
             None
         """
         Zbar = self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
-        return Zbar
+        return Zbar*(np.exp(-5000**2/Te**2)+1e-5)
 
     def set_ionization(self):
         """
