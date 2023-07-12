@@ -123,7 +123,7 @@ class TwoTemperatureModel():
             self.experiment.make_n_e_profile()
             # Make list of temperature profiles 
             self.Te_list.append(self.Te.copy()); self.Ti_list.append(self.Ti.copy())
-            
+            self.Zbar = self.experiment.get_ionization(self.experiment.Z, self.n_i, self.Te)
             
 
                 
