@@ -1,0 +1,18 @@
+# Some questions about how the model currently works, what limits it and what to improve
+
+Hydrodynamics:
+	Currently assuming: - ideal gas for pressure
+						- Thermal Kinetic energy is directly related to Temperature, ideal specific heat built in, no potential energy
+
+Ionization:
+	Currently assuming: - Zbar from Thomas-Fermi, no dynamics of recombination etc. 
+
+
+Experiment:
+	Currently assuming: - Assume cylinder symmetric along axis, and Te measurement is of core of cylinder
+						- How does this actually work?!?! Where is surface? What is measured, bulk T integral (rho T)? To what radius is this integrated?
+
+
+
+Improvements:
+	- 

@@ -84,9 +84,22 @@ class HydroModel():
         """
         Assuming Ideal pressure right now
         """
+        return self.get_Pe() + self.get_Pi()
+
+    def get_Pe(self):
+        """
+        Assuming Ideal pressure right now
+        """
         P_e = k_B*self.n_e * self.Te
+        return P_e
+
+    def get_Pi(self):
+        """
+        Assuming Ideal pressure right now
+        """
         P_i = k_B*self.n_i * self.Ti
-        return P_i + P_e
+        return P_i
+
 
     def get_Ek_i(self):
         """
@@ -118,6 +131,7 @@ class HydroModel():
         self.v_list = [np.zeros_like(self.Te)]
         self.P_list = [np.zeros_like(self.n_e)]
         self.n_e_list = [self.n_e]
+        self.n_i_list = [self.n_i]
         
         self.v = np.zeros_like(self.n_e) # initialize velocity at zero
 
@@ -140,7 +154,7 @@ class HydroModel():
             net_flux_Ek_i = flux_Ek_i[1:]  - flux_Ek_i[:-1]
             self.Ek_i[:-1] = self.Ek_i[:-1] + self.dt * ( 
                     - net_flux_Ek_i/self.grid.cell_volumes
-                    + ( -0.5 * 1/1*self.P * (self.v  +   self.grid.r * self.grad(self.v))
+                    + ( #-1/3*self.Pi * (self.v  +   self.grid.r * self.grad(self.v))
                     +   G*(self.Te - self.Ti) )[:-1]
                     )
 
@@ -149,7 +163,7 @@ class HydroModel():
             net_flux_Ek_e = flux_Ek_e[1:]  - flux_Ek_e[:-1]
             self.Ek_e[:-1] = self.Ek_e[:-1] + self.dt * ( 
                     - net_flux_Ek_e/self.grid.cell_volumes
-                    + ( -0.5 * 1/1*self.P * (self.v  +   self.grid.r * self.grad(self.v)) # divide by two to separate into i and e parts
+                    + ( #-1/3*self.Pe * (self.v  +   self.grid.r * self.grad(self.v)) # divide by two to separate into i and e parts
                     -   G*(self.Te - self.Ti) )[:-1]
                     )
 
@@ -174,3 +188,4 @@ class HydroModel():
             self.v_list.append(self.v.copy())
             self.P_list.append(self.P.copy())
             self.n_e_list.append(self.n_e.copy())
+            self.n_i_list.append(self.n_i.copy())

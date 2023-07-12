@@ -40,8 +40,8 @@ class Experiment():
     Initializes all physical parameters according to initial conditions of experiment.
     """
 
-    def __init__(self, grid, n0, Z, A, Te_experiment_initial, Ti_experiment_initial, laser_width, 
-                gas_name='Argon', model = "SMT", ion_temperature_model = 'gaussian', ion_temperature_file = None):
+    def __init__(self, grid, n0, Z, A, Te_experiment_initial, Ti_experiment_initial, intensity_full_width_at_half_maximum, temperature_width,
+                gas_name='Argon', model = "SMT", electron_temperature_model='lorentz', ion_temperature_model = 'electron', ion_temperature_file = None):
         """
         Args:
             n0: Density of gas [1/m^3] 
@@ -60,9 +60,11 @@ class Experiment():
         self.m_i = A * m_p
         self.Te_exp_init = Te_experiment_initial
         self.Ti_exp_init = Ti_experiment_initial
-        self.laser_width = laser_width
-        self.full_width_at_half_maximum = self.laser_width
+        self.intensity_full_width_at_half_maximum = intensity_full_width_at_half_maximum
+        # self.temperature_full_width_at_half_maximum = temperature_full_width_at_half_maximum
+        self.T_measurement_radius = temperature_width
         self.ion_temperature_model  = ion_temperature_model
+        self.electron_temperature_model  = electron_temperature_model
         self.ion_temperature_file = ion_temperature_file 
         self.n0 = n0 # Density- may change this variable later
 
@@ -78,7 +80,7 @@ class Experiment():
 
     def get_bulk_T(self, T_profile, n_profile, max_r = None):
         if max_r==None:
-            max_r = 0.5*self.full_width_at_half_maximum
+            max_r = self.T_measurement_radius   #0.5*self.full_width_at_half_maximum
         
         width_index = np.argmin(np.abs(self.grid.r - max_r))
 
@@ -100,12 +102,8 @@ class Experiment():
         self.Ti = self.T_distribution(self.Ti_peak)
         print("Using gaussian model for Ti: Ti_max = {0:.3e} K".format(self.Ti_peak))
 
-
-    def make_gaussian_Te_profile(self):
+    def make_Te_profile(self):
         """
-        NEEDS WORK
-        Zbar, ne <-> Te needs to be self-consistent
-
         Makes an initial temperature profile after laser heating for the electrons and ion.
         Currently assumes measured Temperature is based on bulk average over laser width region
         Args:
@@ -113,14 +111,6 @@ class Experiment():
         Returns:
             None
         """
-        r = self.grid.r
-
-        σ = np.sqrt( (self.full_width_at_half_maximum/2)**2/np.log(2)/2)
-        
-        self.T_room = 300
-        self.T_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
-        # self.Ti_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room
-
         # Rescale so bulk Temperature is the initial one.
         def ΔT_to_min( T_max ):
             Te_profile = self.T_distribution(T_max)
@@ -135,6 +125,31 @@ class Experiment():
         print("Initial peak T_electron converged: ", sol.x, sol.success, sol.message)
         print("Te_max = {0:.3e} K".format(self.Te_peak))
         self.Te = self.T_distribution(self.Te_peak)
+        
+
+    def make_lorentz_Te_profile(self):
+        r = self.grid.r
+        
+        self.T_room = 300
+        
+        Γ = self.intensity_full_width_at_half_maximum/2
+        self.T_distribution = lambda T_max : T_max* (Γ**2 / ( r**2 + Γ**2 ))**(1/4) # 1/4 since really Lorentzian is a fit to Intensity
+
+        self.make_Te_profile()
+
+
+    def make_gaussian_Te_profile(self):
+
+        r = self.grid.r
+
+        σ = np.sqrt( (self.intensity_full_width_at_half_maximum/2)**2/np.log(2)/2)
+        
+        self.T_room = 300
+        self.T_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
+        # self.Ti_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room
+        
+        self.make_Te_profile()
+
         
     def make_MD_Ti_profile(self):
 
@@ -161,9 +176,12 @@ class Experiment():
         Returns:
             None
         """
-        self.make_gaussian_Te_profile()
-        
-        if self.ion_temperature_model == 'gaussian':
+        if self.electron_temperature_model == 'gaussian':
+            self.make_gaussian_Te_profile()
+        elif self.electron_temperature_model == 'lorentz':
+            self.make_lorentz_Te_profile()
+            
+        if self.ion_temperature_model == 'electron':
             self.make_gaussian_Ti_profile()
         elif self.ion_temperature_model == 'MD':
             self.make_MD_Ti_profile()
