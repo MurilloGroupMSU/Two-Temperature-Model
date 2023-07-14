@@ -16,6 +16,7 @@
 import numpy as np
 from constants import *
 
+
 class Physical_Parameters(): 
     """
     Base class of physical parameters. Incorporates model-free physics
@@ -48,6 +49,15 @@ class Physical_Parameters():
         rs = (3/(4*π*n))**(1/3)
         return rs
 
+    @staticmethod
+    def photon_energy_density(Tγ):
+        """
+        Returns the integrated-over-frequency energy density of photons at Temperature T
+        Args:
+            Tγ: Temperature of photons [K] 
+        """
+        return 4*σ_SB/c * Tγ**4
+        
     @staticmethod
     def electron_thermal_velocity(Te):
         """
@@ -84,7 +94,7 @@ class Physical_Parameters():
         return λDe
 
     @staticmethod
-    def ion_Debye_length(ni, Ti, Zi):
+    def ion_Debye_length(n_i, Ti, Zi):
         """
         Returns the ion Debye length
         Args: 
@@ -92,14 +102,37 @@ class Physical_Parameters():
             Ti: Temperature [K]
             Zi: Ionization number
         """
-        λDe = np.sqrt(ε_0*k_B*Ti/((Zi * ee)**2*ni) )
+        λDe = np.sqrt(ε_0*k_B*Ti/((Zi * ee)**2*n_i) )
         return λDe
+
+    @staticmethod
+    def total_Debye_length(n_e, n_i, Ti, Te, Zi):
+        """
+        Returns the electron Debye length
+        Args: 
+            n: number density [1/m^3]
+            T: Temperature [K]
+        """
+        λD = 1/np.sqrt(  ee**2*n_e/(ε_0*k_B*Te) + (Zi * ee)**2*n_i/(ε_0*k_B*Ti)   )
+        return λD
+
     
     @staticmethod
     def electron_plasma_frequency(n_e):
         return np.sqrt( n_e*ee**2 / (m_e*ε_0) )
 
     # Class Methods
+
+    @classmethod
+    def Thomas_Fermi_wavelength(cls, n_e, Te):
+        """
+        Thomas Fermi wavelength
+        """
+        λ_classical = cls.electron_Debye_length(n_e, Te)
+        λ_TF = λ_classical / np.sqrt(1 + 4/9 * cls.Theta(n_e, Te))
+        return λ_TF
+
+
     @classmethod
     def Fermi_velocity(cls, n, m):
         E_F = cls.Fermi_energy(n)
@@ -133,6 +166,26 @@ class Physical_Parameters():
         '''
         Γ = (Z*ee)**2/(4*π*ε_0*cls.r_WignerSeitz(n))/(k_B*T)
         return Γ
+    
+    
+
+    @classmethod
+    def kappa(cls, n_e, n_i, Te, Ti, Zi):
+        '''
+        Returns the Debye screening parameter κ
+        
+        Args: 
+            n_e: electron number density [1/m^3]
+            n_i: ion number density [1/m^3]
+            Te: Electron Temperature [K]
+            Ti: Ion Temperature [K]
+            Zi: Ion charge
+
+        Returns: 
+            κ
+        '''
+        κ = cls.r_WignerSeitz(n_i) / cls.Thomas_Fermi_wavelength(n_e, Te)
+        return κ
     
     @classmethod
     def electron_deBroglie_wavelength(cls, n_e, Te):
@@ -343,6 +396,7 @@ class JT_GMS(Physical_Parameters):
 
         G = Ce/τei
         return G
+
 
     @classmethod
     def electron_thermal_conductivity(cls, n_e, n_i, m_i, Z_i, Te, Ti):

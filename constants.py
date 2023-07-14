@@ -14,6 +14,7 @@ hbar=  6.62607015e-34 # Planck [J/s]
 a_B = 5.29177210903e-11 # m
 α  = 0.0072973525693 # 1/c in AU
 c  = 2.99792458e8 #m/s
+σ_SB = 2*π**5 * k_B**4/( 15* (2*π*hbar)**3 * c**2 ) #
 
 # Conversion units
 # Multiply variable by this to go from first unit to second

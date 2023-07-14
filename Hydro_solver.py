@@ -116,6 +116,12 @@ class HydroModel():
     def get_T_from_E(self, Ek, n):
         return 2/3 * Ek/n/k_B
 
+    def get_FWHM(self):
+        FWHM_index = np.argmin(np.abs(self.Te - 0.5*self.Te[0]))
+        FWHM = 2*self.grid.r[FWHM_index]
+        return FWHM
+
+
     def solve_hydro(self, dt=None, tmax=None):
         """
         Solves TTM model using finite-volume method. 
@@ -126,16 +132,18 @@ class HydroModel():
         """
         self.make_times(dt=dt, tmax=tmax)
 
+        self.t_saved_list = [0]
         self.Te_list, self.Ti_list = [self.Te.copy()], [self.Ti.copy()]
-        self.Ek_e_list = [self.get_Ek_e()]
+        self.Ek_e_list = [self.get_Ek_e()   ]
         self.v_list = [np.zeros_like(self.Te)]
         self.P_list = [np.zeros_like(self.n_e)]
-        self.n_e_list = [self.n_e]
-        self.n_i_list = [self.n_i]
+        self.n_e_list = [self.n_e.copy()]
+        self.n_i_list = [self.n_i.copy()]
+        self.FWHM_list = [self.get_FWHM()]
         
         self.v = np.zeros_like(self.n_e) # initialize velocity at zero
 
-        for t in self.t_list[:-1]:
+        for i, t in enumerate(self.t_list[:-1]):
             # Calculate new temperatures using explicit Euler method, finite volume, and relaxation
             
             G  = self.G(self.n_e, self.n_i, self.Zbar, self.Te,self.Ti) 
@@ -154,7 +162,7 @@ class HydroModel():
             net_flux_Ek_i = flux_Ek_i[1:]  - flux_Ek_i[:-1]
             self.Ek_i[:-1] = self.Ek_i[:-1] + self.dt * ( 
                     - net_flux_Ek_i/self.grid.cell_volumes
-                    + ( #-1/3*self.Pi * (self.v  +   self.grid.r * self.grad(self.v))
+                    + ( -1/3*self.get_Pi() * self.grad(self.v)
                     +   G*(self.Te - self.Ti) )[:-1]
                     )
 
@@ -163,7 +171,7 @@ class HydroModel():
             net_flux_Ek_e = flux_Ek_e[1:]  - flux_Ek_e[:-1]
             self.Ek_e[:-1] = self.Ek_e[:-1] + self.dt * ( 
                     - net_flux_Ek_e/self.grid.cell_volumes
-                    + ( #-1/3*self.Pe * (self.v  +   self.grid.r * self.grad(self.v)) # divide by two to separate into i and e parts
+                    + ( -1/3*self.get_Pe()*( self.grad(self.v)  + 1/(self.grid.r + self.grid.dr/10)*self.v) # divide by two to separate into i and e parts
                     -   G*(self.Te - self.Ti) )[:-1]
                     )
 
@@ -175,17 +183,24 @@ class HydroModel():
             self.n_e = self.n_i*self.Zbar # enforce quasineutrality
 
             # Update velocities
-            self.v[:-1] = self.v[:-1] - self.dt * (
-                1/self.ρ * P_grad + self.v*self.grad(self.v)
-                )[:-1] 
+            self.v[:-1] = self.v[:-1] + self.dt * (
+                 -1/3*self.grad(self.P)/self.ρ  - self.v*self.grad(self.v)
+                 )[:-1] 
+                
+            self.v[0]=0
 
             # Update temperatures
             self.Te = self.get_T_from_E(self.Ek_e, self.n_e)
             self.Ti = self.get_T_from_E(self.Ek_i, self.n_i)
+            if np.any(np.isnan(self.Ti))==True:
+                print("Error: Returning nan's. Decrease dt?` ")
             # Make list of temperature profiles 
-            self.Te_list.append(self.Te.copy()); self.Ti_list.append(self.Ti.copy())
-            self.Ek_e_list.append(self.Ek_e.copy())
-            self.v_list.append(self.v.copy())
-            self.P_list.append(self.P.copy())
-            self.n_e_list.append(self.n_e.copy())
-            self.n_i_list.append(self.n_i.copy())
+            if i%100==0:
+                self.t_saved_list.append(t)
+                self.Te_list.append(self.Te.copy()); self.Ti_list.append(self.Ti.copy())
+                self.Ek_e_list.append(self.Ek_e.copy())
+                self.v_list.append(self.v.copy())
+                self.P_list.append(self.P.copy())
+                self.n_e_list.append(self.n_e.copy())
+                self.n_i_list.append(self.n_i.copy())
+                self.FWHM_list.append(self.get_FWHM())

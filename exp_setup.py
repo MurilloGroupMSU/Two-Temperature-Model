@@ -8,6 +8,7 @@
 import numpy as np
 from pandas import read_csv
 from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
 
 
 from physics import JT_GMS as jt_mod
@@ -152,16 +153,14 @@ class Experiment():
 
         
     def make_MD_Ti_profile(self):
-
-        def gaussian_Ti(r, T_peak, T_room, σ ):
-            return T_room + T_peak*np.exp(-r**2/(2*σ**2))
-            
+        "Needs improvement! Better exptrapolationg to high Z? Exp?"
+  
         dih_file = self.ion_temperature_file #"/home/zach/plasma/TTM/data/Xe5bar_DIH_profile_data.txt"
         data = read_csv(dih_file, delim_whitespace=True, header=0 )
-
-        T_peak_fit, T_room_fit, σ_fit = curve_fit(gaussian_Ti, data['r[m]']*1e6, data['Tion[K]']*1e-3 )[0]
-        print("Ti fit params: ", T_peak_fit, T_room_fit, σ_fit)
-        self.Ti = gaussian_Ti(self.grid.r*1e6, T_peak_fit, T_room_fit, σ_fit)*1e3
+        
+        Ti_func = interp1d(data['Zbar'], data['Tion[K]'], bounds_error=False, fill_value='extrapolate')
+        self.Ti = np.array(Ti_func(self.Zbar))
+        return self.Ti
         
 
     def make_T_profiles(self):
@@ -181,6 +180,8 @@ class Experiment():
         elif self.electron_temperature_model == 'lorentz':
             self.make_lorentz_Te_profile()
             
+        self.set_ionization()
+
         if self.ion_temperature_model == 'electron':
             self.make_gaussian_Ti_profile()
         elif self.ion_temperature_model == 'MD':
