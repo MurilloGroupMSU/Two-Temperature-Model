@@ -121,8 +121,52 @@ class Physical_Parameters():
     def electron_plasma_frequency(n_e):
         return np.sqrt( n_e*ee**2 / (m_e*ε_0) )
 
-    # Class Methods
+    @staticmethod
+    def Thomas_Fermi_Zbar(Z, num_density, T):
+        """
+        Finite Temperature Thomas Fermi Charge State using 
+        R.M. More, "Pressure Ionization, Resonances, and the
+        Continuity of Bound and Free States", Adv. in Atomic 
+        Mol. Phys., Vol. 21, p. 332 (Table IV).
+        
+        Args:
+            Z: atomic number
+            num_density: number density [m^-3]
+            T: temperature [K]
+        Returns:
+            Zbar: Average ionization
+        """
 
+        alpha = 14.3139
+        beta = 0.6624
+        a1 = 0.003323
+        a2 = 0.9718
+        a3 = 9.26148e-5
+        a4 = 3.10165
+        b0 = -1.7630
+        b1 = 1.43175
+        b2 = 0.31546
+        c1 = -0.366667
+        c2 = 0.983333
+        
+
+        convert = num_density*mc_to_cc*1.6726e-24
+        R = convert/Z
+        T0_in_eV = T*K_to_eV/Z**(4./3.)
+        Tf_in_eV = T0_in_eV*K_to_eV/(1 + T0_in_eV)
+
+        A = a1*T0_in_eV**a2 + a3*T0_in_eV**a4
+        B = -np.exp(b0 + b1*Tf_in_eV + b2*Tf_in_eV**7)
+        C = c1*Tf_in_eV + c2
+        Q1 = A*R**B
+        Q = (R**C + Q1**C)**(1/C)
+        x = alpha*Q**beta
+        Zbar = Z*x/(1 + x + np.sqrt(1 + 2.*x))
+        
+        return Zbar
+
+
+    # Class Methods
     @classmethod
     def Thomas_Fermi_wavelength(cls, n_e, Te):
         """
@@ -139,6 +183,11 @@ class Physical_Parameters():
         v_F = np.sqrt(2*E_F/m)
         return v_F
 
+    @staticmethod
+    def average_temperature(m1, T1, m2, T2):
+        T_avg = (m1 * T2 + m2*T1)/(m1 + m2)
+        return T_avg
+
     @classmethod
     def Theta(cls, n, T):
         '''
@@ -154,7 +203,7 @@ class Physical_Parameters():
 
     @classmethod
     def Gamma(cls, n, T, Z=1):
-        '''
+        """
         Returns the Coulomb coupling strength parameter Γ
         
         Args: 
@@ -163,7 +212,7 @@ class Physical_Parameters():
 
         Returns: 
             Γ
-        '''
+        """
         Γ = (Z*ee)**2/(4*π*ε_0*cls.r_WignerSeitz(n))/(k_B*T)
         return Γ
     
@@ -225,55 +274,32 @@ class Physical_Parameters():
         # λ = hbar /2 /np.sqrt( k_B*Te*m_e ) # Classical
         return λ
 
-    @staticmethod
-    def average_temperature(m1, T1, m2, T2):
-        T_avg = (m1 * T2 + m2*T1)/(m1 + m2)
-        return T_avg
-    
-    @staticmethod
-    def Thomas_Fermi_Zbar(Z, num_density, T):
+    @classmethod
+    def photon_mean_free_path(cls, ω, m_i, n_i, n_e, Ti, Te, Zbar):
         """
-        Finite Temperature Thomas Fermi Charge State using 
-        R.M. More, "Pressure Ionization, Resonances, and the
-        Continuity of Bound and Free States", Adv. in Atomic 
-        Mol. Phys., Vol. 21, p. 332 (Table IV).
-        
+        Specifically assuming free-free inverse bremsstrahulng dominates. 
+        Electrson absorb light during collision with ion.
+        "Blackbody Emission from Laser Breakdown in High-Pressure Gases"  Bataller et al.
+        Single temperature equation, requiring some guesswork for what Temperatures go where
+        Assume Tγ = Te
+
         Args:
-            Z: atomic number
-            num_density: number density [m^-3]
-            T: temperature [K]
+            ω : light angular frequency in rads/s
+            
         Returns:
-            Zbar: Average ionization
+            l_mfp: mean free path in m 
         """
+        Tei = cls.average_temperature(m_e, Te, m_i, Ti)
+        Γei = cls.Gamma(n_i, Tei, Z = np.sqrt(Zbar))
+        ω_pe = np.sqrt(Zbar)*cls.electron_plasma_frequency(n_e) # plasma frequency
+        γ = (ω_pe/ω)**2
 
-        alpha = 14.3139
-        beta = 0.6624
-        a1 = 0.003323
-        a2 = 0.9718
-        a3 = 9.26148e-5
-        a4 = 3.10165
-        b0 = -1.7630
-        b1 = 1.43175
-        b2 = 0.31546
-        c1 = -0.366667
-        c2 = 0.983333
-        
+        Γω = Γei *k_B*Te/(hbar*ω)*( 1-np.exp( -hbar*ω/ (k_B*Te) ) )
 
-        convert = num_density*mc_to_cc*1.6726e-24
-        R = convert/Z
-        T0_in_eV = T*K_to_eV/Z**(4./3.)
-        Tf_in_eV = T0_in_eV*K_to_eV/(1 + T0_in_eV)
+        ν_ω = ω * 2/np.sqrt(6*π) * np.sqrt(γ*Γei)* Γω * np.log(0.7/np.sqrt(3) * Γω**(-1.5) +1)
 
-        A = a1*T0_in_eV**a2 + a3*T0_in_eV**a4
-        B = -np.exp(b0 + b1*Tf_in_eV + b2*Tf_in_eV**7)
-        C = c1*Tf_in_eV + c2
-        Q1 = A*R**B
-        Q = (R**C + Q1**C)**(1/C)
-        x = alpha*Q**beta
-        Zbar = Z*x/(1 + x + np.sqrt(1 + 2.*x))
-        
-        return Zbar
-
+        l_mfp = c/ν_ω
+        return l_mfp 
 
 
 class Plasma_Formulary_Physics(Physical_Parameters):

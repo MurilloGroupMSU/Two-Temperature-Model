@@ -158,22 +158,21 @@ class HydroModel():
             P_grad = self.grad(self.P) # Calculate gradient of pressure
             # Energy equation
             # ion
-            flux_Ek_i = 2*π*self.grid.r * self.v * self.Ek_i
+            flux_Ek_i = 2*π*self.grid.r * self.v * (self.Ek_i + self.get_Pi())
             net_flux_Ek_i = flux_Ek_i[1:]  - flux_Ek_i[:-1]
             self.Ek_i[:-1] = self.Ek_i[:-1] + self.dt * ( 
                     - net_flux_Ek_i/self.grid.cell_volumes
-                    + ( -1/3*self.get_Pi() * self.grad(self.v)
-                    +   G*(self.Te - self.Ti) )[:-1]
+                    + (G*(self.Te - self.Ti) )[:-1]
                     )
 
             # electron
-            flux_Ek_e = 2*π*self.grid.r * self.v * self.Ek_e
+            flux_Ek_e = 2*π*self.grid.r * self.v * (  self.Ek_e + self.get_Pe() )
             net_flux_Ek_e = flux_Ek_e[1:]  - flux_Ek_e[:-1]
             self.Ek_e[:-1] = self.Ek_e[:-1] + self.dt * ( 
                     - net_flux_Ek_e/self.grid.cell_volumes
-                    + ( -1/3*self.get_Pe()*( self.grad(self.v)  + 1/(self.grid.r + self.grid.dr/10)*self.v) # divide by two to separate into i and e parts
-                    -   G*(self.Te - self.Ti) )[:-1]
+                    - (G*(self.Te - self.Ti))[:-1]
                     )
+                    
 
             # Update densities with continuity equation and quasineutrality
             flux_n = 2*π*self.grid.r * self.n_i * self.v
@@ -184,7 +183,7 @@ class HydroModel():
 
             # Update velocities
             self.v[:-1] = self.v[:-1] + self.dt * (
-                 -1/3*self.grad(self.P)/self.ρ  - self.v*self.grad(self.v)
+                 -self.grad(self.P)/self.ρ  - self.v*self.grad(self.v)
                  )[:-1] 
                 
             self.v[0]=0
