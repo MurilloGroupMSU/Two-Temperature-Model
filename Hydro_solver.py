@@ -141,7 +141,7 @@ class HydroModel():
         """
         self.make_times(dt=dt, tmax=tmax)
 
-        self.t_saved_list = [0]
+        self.t_saved_list = []
         self.Te_list, self.Ti_list = [self.Te.copy()], [self.Ti.copy()]
         self.Ek_e_list = [self.get_Ek_e()   ]
         self.v_list = [np.zeros_like(self.Te)]
