@@ -12,7 +12,11 @@ Experiment:
 	Currently assuming: - Assume cylinder symmetric along axis, and Te measurement is of core of cylinder
 						- How does this actually work?!?! Where is surface? What is measured, bulk T integral (rho T)? To what radius is this integrated?
 
-
+Photons:
+	Currently assuming: - Inverse brehmsstralung dominates 
+											- Ignoring Langdon and ion screening effects (See "Inverse Bremsstrahlung Absorption" Turnbull et al.)
+											- Ignoring all scattering and assuming photons all come from direct line of sight
+											- Instead of integrating over wavelengths, assuming absorption coefficients given by average frequency (ω_av = E_av/hbar = 2.701 k_B Tγ/hbar )
 
 Improvements:
 	- 

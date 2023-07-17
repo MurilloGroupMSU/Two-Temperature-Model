@@ -42,7 +42,8 @@ class Experiment():
     """
 
     def __init__(self, grid, n0, Z, A, Te_experiment_initial, Ti_experiment_initial, intensity_full_width_at_half_maximum, temperature_width,
-                gas_name='Argon', model = "SMT", electron_temperature_model='lorentz', ion_temperature_model = 'electron', ion_temperature_file = None):
+                gas_name='Argon', model = "SMT", electron_temperature_model='lorentz', ion_temperature_model = 'electron', ion_temperature_file = None,
+                Te_experiment_is_peak=False, super_gaussian_power=1):
         """
         Args:
             n0: Density of gas [1/m^3] 
@@ -64,10 +65,12 @@ class Experiment():
         self.intensity_full_width_at_half_maximum = intensity_full_width_at_half_maximum
         # self.temperature_full_width_at_half_maximum = temperature_full_width_at_half_maximum
         self.T_measurement_radius = temperature_width
-        self.ion_temperature_model  = ion_temperature_model
+        self.Te_experiment_is_peak = Te_experiment_is_peak
+        self.ion_temperature_model = ion_temperature_model
         self.electron_temperature_model  = electron_temperature_model
         self.ion_temperature_file = ion_temperature_file 
         self.n0 = n0 # Density- may change this variable later
+        self.super_gaussian_power = super_gaussian_power
 
         if model == "SMT":
             self.params = smt_mod
@@ -112,18 +115,21 @@ class Experiment():
         Returns:
             None
         """
-        # Rescale so bulk Temperature is the initial one.
-        def ΔT_to_min( T_max ):
-            Te_profile = self.T_distribution(T_max)
-            ne_profile = self.get_ionization(self.Z, self.n_i, Te_profile)
-            bulk_T = self.get_bulk_T(Te_profile, ne_profile)
-            ΔT = bulk_T - self.Te_exp_init
-            return ΔT
+        if self.Te_experiment_is_peak==True:
+            self.Te_peak = self.Te_exp_init            
+        else:
+            # Rescale so bulk Temperature is the initial one.
+            def ΔT_to_min( T_max ):
+                Te_profile = self.T_distribution(T_max)
+                ne_profile = self.get_ionization(self.Z, self.n_i, Te_profile)
+                bulk_T = self.get_bulk_T(Te_profile, ne_profile)
+                ΔT = bulk_T - self.Te_exp_init
+                return ΔT
 
-        sol = root(ΔT_to_min, self.Te_exp_init )
-        self.Te_peak = float(sol.x)
-        
-        print("Initial peak T_electron converged: ", sol.x, sol.success, sol.message)
+                sol = root(ΔT_to_min, self.Te_exp_init )
+                self.Te_peak = float(sol.x)
+                print("Initial peak T_electron converged: ", sol.x, sol.success, sol.message)
+
         print("Te_max = {0:.3e} K".format(self.Te_peak))
         self.Te = self.T_distribution(self.Te_peak)
         
@@ -139,15 +145,14 @@ class Experiment():
         self.make_Te_profile()
 
 
-    def make_gaussian_Te_profile(self):
+    def make_gaussian_Te_profile(self, power=1): #generic super gaussian, with power=1 corresponding to regular gaussian
 
         r = self.grid.r
 
-        σ = np.sqrt( (self.intensity_full_width_at_half_maximum/2)**2/np.log(2)/2)
+        # σ = np.sqrt( (self.intensity_full_width_at_half_maximum/2)**2/np.log(2)/2)
         
         self.T_room = 300
-        self.T_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room #Gaussian Laser
-        # self.Ti_distribution = lambda T_max: T_max*np.exp(-r**2/(2*σ**2)) + self.T_room
+        self.T_distribution = lambda T_max: T_max*np.exp(-np.log(2)* ( 4*r**2/self.intensity_full_width_at_half_maximum**2)**self.super_gaussian_power )+ self.T_room #Gaussian Laser
         
         self.make_Te_profile()
 
@@ -158,8 +163,13 @@ class Experiment():
         dih_file = self.ion_temperature_file #"/home/zach/plasma/TTM/data/Xe5bar_DIH_profile_data.txt"
         data = read_csv(dih_file, delim_whitespace=True, header=0 )
         
+        def T_DIH_fit(Zbar, T_room, T_0, pow):
+            return T_room + T_0 *Zbar**pow
+
+        fit_vals = curve_fit(T_DIH_fit, data['Zbar'], data['Tion[K]'])[0]
+
         Ti_func = interp1d(data['Zbar'], data['Tion[K]'], bounds_error=False, fill_value='extrapolate')
-        self.Ti = np.array(Ti_func(self.Zbar))
+        self.Ti = T_DIH_fit(self.Zbar, *fit_vals) #np.array(Ti_func(self.Zbar))
         return self.Ti
         
 
@@ -197,7 +207,7 @@ class Experiment():
             None
         """
         Zbar = self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
-        return Zbar#*(np.exp(-5000**2/Te**2)+1e-5)
+        return Zbar*(np.exp(-2000**2/Te**2)+1e-5)
 
     def set_ionization(self):
         """

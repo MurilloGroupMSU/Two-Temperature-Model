@@ -217,7 +217,6 @@ class Physical_Parameters():
         return Γ
     
     
-
     @classmethod
     def kappa(cls, n_e, n_i, Te, Ti, Zi):
         '''
@@ -287,20 +286,82 @@ class Physical_Parameters():
             ω : light angular frequency in rads/s
             
         Returns:
-            l_mfp: mean free path in m 
+            l_mfp: photon mean free path [m] 
         """
         Tei = cls.average_temperature(m_e, Te, m_i, Ti)
         Γei = cls.Gamma(n_i, Tei, Z = np.sqrt(Zbar))
-        ω_pe = np.sqrt(Zbar)*cls.electron_plasma_frequency(n_e) # plasma frequency
+        ω_pe = cls.electron_plasma_frequency(n_e) # plasma frequency
         γ = (ω_pe/ω)**2
 
         Γω = Γei *k_B*Te/(hbar*ω)*( 1-np.exp( -hbar*ω/ (k_B*Te) ) )
 
         ν_ω = ω * 2/np.sqrt(6*π) * np.sqrt(γ*Γei)* Γω * np.log(0.7/np.sqrt(3) * Γω**(-1.5) +1)
 
-        l_mfp = c/ν_ω
+        l_mfp = c/ν_ω * np.sqrt(1-γ)/γ
         return l_mfp 
+        
+    @classmethod
+    def photon_absorption_coefficient(cls, ω, m_i, n_i, n_e, Ti, Te, Zbar):
+        """
+        Specifically assuming free-free inverse bremsstrahulng dominates. 
+        Electrson absorb light during collision with ion.
+        "Blackbody Emission from Laser Breakdown in High-Pressure Gases"  Bataller et al.
+        Single temperature equation, requiring some guesswork for what Temperatures go where
+        Assume Tγ = Te
 
+        Args:
+            ω : light angular frequency in rads/s
+            
+        Returns:
+            κ: absorption coefficient [1/m]
+        """
+        κ=1/cls.photon_mean_free_path(ω, m_i, n_i, n_e, Ti, Te, Zbar)
+        # ωp = cls.electron_plasma_frequency(n_e)
+        # νei = 1/cls.ei_relaxation_times(n_e, n_i, m_i, Zbar, Te, Ti)[0] 
+        # κ = 1/c * νei * (ωp/ω)**2 * 1/np.sqrt(1-(ωp/ω)**2) 
+        return κ 
+
+    @classmethod
+    def effective_photon_absorption_coefficient(cls, m_i, n_i, n_e, Ti, Te, Zbar):
+        """
+        Same as above, but instead of inserting ω, assumes the absorption is approximately that of the average photon energy of a blackbody 
+        This is ω_av = E_av/hbar = 2.701 k_B Tγ/hbar 
+
+        Args:
+            ω : light angular frequency in rads/s
+            
+        Returns:
+            κ: absorption coefficient [1/m]
+        """
+        ω_av = 2.701*k_B* Te/hbar
+        κ_eff = cls.photon_absorption_coefficient(ω_av, m_i, n_i, n_e, Ti, Te, Zbar)
+        return κ_eff 
+
+    @classmethod
+    def photon_wavelength_density(cls, λ, Te):
+        """
+        Plancks law in the form of B_λ
+
+        Args:
+
+        Returns:
+
+        """
+        B_λ = 4*π*hbar * c**2/λ**5 * 1/(np.exp(2*π*hbar*c/(λ*k_B*Te))-1) 
+        return B_λ
+
+    @classmethod
+    def photon_angular_frequency_density(cls, ω, Te):
+        """
+        Plancks law in the form of B_λ
+
+        Args:
+
+        Returns:
+
+        """
+        B_ω = hbar * ω**3/(4*π**3*c**2)* 1/(np.exp(hbar*ω/(k_B*Te))-1) 
+        return B_ω
 
 class Plasma_Formulary_Physics(Physical_Parameters):
     """

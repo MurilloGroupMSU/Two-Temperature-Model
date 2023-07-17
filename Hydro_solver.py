@@ -10,6 +10,7 @@ from physics import JT_GMS as jt_mod
 from physics import SMT as smt_mod
 from constants import *
 
+from scipy.optimize import root
 
 class HydroModel():
     """
@@ -113,8 +114,16 @@ class HydroModel():
         """
         return 3/2 * k_B * self.Te * self.n_e
 
-    def get_T_from_E(self, Ek, n):
-        return 2/3 * Ek/n/k_B
+    def get_Ti_from_Ei(self, Eki, ni):
+        return 2/3 * Eki/ni/k_B
+
+    def get_Te_and_Zbar(self, Ek_e, n_i):
+        Zbar = lambda Te: self.experiment.get_ionization(self.experiment.Z, n_i, Te)
+        # Te_guess = 2/3 * Ek/(ni*Zbar*k_B)
+        f_to_min_Te = lambda Te: np.abs(Te - 2/3 * Ek_e/(n_i*Zbar(Te)*k_B) )
+        sol = root(f_to_min_Te, self.Te )
+        Te = sol.x
+        return Te, Zbar(Te)
 
     def get_FWHM(self):
         FWHM_index = np.argmin(np.abs(self.Te - 0.5*self.Te[0]))
@@ -175,10 +184,16 @@ class HydroModel():
                     
 
             # Update densities with continuity equation and quasineutrality
-            flux_n = 2*π*self.grid.r * self.n_i * self.v
-            net_flux_n = flux_n[1:] - flux_n[:-1]
-            self.n_i[:-1] = self.n_i[:-1] - self.dt * net_flux_n/self.grid.cell_volumes
-            self.Zbar = self.experiment.get_ionization(self.experiment.Z, self.n_i, self.Te)
+            flux_ni = 2*π*self.grid.r * self.n_i * self.v
+            net_flux_ni = flux_ni[1:] - flux_ni[:-1]
+            self.n_i[:-1] = self.n_i[:-1] - self.dt * net_flux_ni/self.grid.cell_volumes
+            self.Ti = self.get_Ti_from_Ei(self.Ek_i, self.n_i)
+            # flux_ne = 2*π*self.grid.r * self.n_e * self.v
+            # net_flux_ne = flux_ne[1:] - flux_ne[:-1]
+            # self.n_e[:-1] = self.n_e[:-1] - self.dt * net_flux_ne/self.grid.cell_volumes
+
+            # self.Zbar = self.experiment.get_ionization(self.experiment.Z, self.n_i, self.Te)
+            self.Te, self.Zbar = self.get_Te_and_Zbar(self.Ek_e, self.n_i)
             self.n_e = self.n_i*self.Zbar # enforce quasineutrality
 
             # Update velocities
@@ -188,13 +203,11 @@ class HydroModel():
                 
             self.v[0]=0
 
-            # Update temperatures
-            self.Te = self.get_T_from_E(self.Ek_e, self.n_e)
-            self.Ti = self.get_T_from_E(self.Ek_i, self.n_i)
+            
             if np.any(np.isnan(self.Ti))==True:
                 print("Error: Returning nan's. Decrease dt?` ")
             # Make list of temperature profiles 
-            if i%100==0:
+            if i%1==0:
                 self.t_saved_list.append(t)
                 self.Te_list.append(self.Te.copy()); self.Ti_list.append(self.Ti.copy())
                 self.Ek_e_list.append(self.Ek_e.copy())
@@ -203,3 +216,4 @@ class HydroModel():
                 self.n_e_list.append(self.n_e.copy())
                 self.n_i_list.append(self.n_i.copy())
                 self.FWHM_list.append(self.get_FWHM())
+                self.Zbar_list = np.array(self.n_e_list)/np.array(self.n_i_list)

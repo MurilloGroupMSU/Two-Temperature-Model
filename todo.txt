@@ -1,0 +1,30 @@
+Possible things to do for CLAMS:
+
+1. Adiabatic expansion 
+ 	 - Derive More paper results, check
+ 	 - Make TTM a true hydrodynamic model
+ 	 -Check 3 things consistent: 1. Measured Tdot, 2. Measured Rdot, 3. Expected Rdot
+ 	 
+2. Investigate EOS related things
+	- Derive two species P and U
+		- get number density (is ideal gas approx good enough?)
+		- 
+
+3. Ionization
+	- Get ionization from Saha equation
+	- For initial pressure, would need ionization
+	
+4. Assume Ideal initial
+	- Assuming initial ideal gas means I know n0 for all FWHM listed P cases.  
+
+_______________________________________________________________________________________________________________________
+Experimental Questions to Address:
+
+	1. How is Intensity measured independently of Temperature, to get emmissivity?
+	2. How is Intensity measured as a function of radius?
+	
+		
+		
+		
+
+	
