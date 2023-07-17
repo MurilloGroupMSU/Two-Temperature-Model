@@ -5,7 +5,7 @@ Hydrodynamics:
 						- Thermal Kinetic energy is directly related to Temperature, ideal specific heat built in, no potential energy
 
 Ionization:
-	Currently assuming: - Zbar from Thomas-Fermi, no dynamics of recombination etc. 
+	Currently assuming: - Zbar from Thomas-Fermi with exponential cutoff at low T
 
 
 Experiment:
