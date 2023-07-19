@@ -20,7 +20,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 
-from scipy.optimize import root
+from scipy.optimize import root, minimize
 
 class Cylindrical_Grid():
     """
@@ -45,8 +45,8 @@ class Experiment():
     Initializes all physical parameters according to initial conditions of experiment.
     """
 
-    def __init__(self, grid, n0, Z, A, Te_experiment_initial, Ti_experiment_initial, intensity_full_width_at_half_maximum, temperature_width,
-                gas_name='Argon', model = "SMT", electron_temperature_model='lorentz', ion_temperature_model = 'electron', ion_temperature_file = None,
+    def __init__(self, grid, n0, Z, A, Te_experiment_initial, Te_full_width_at_half_maximum,
+                Ti_experimental_initial = None, gas_name='Argon', model = "SMT", electron_temperature_model='lorentz', ion_temperature_model = 'electron', ion_temperature_file = None,
                 Te_experiment_is_peak=False, super_gaussian_power=1):
         """
         Args:
@@ -65,11 +65,11 @@ class Experiment():
         self.A = A
         self.m_i = A * m_p
         self.Te_exp_init = Te_experiment_initial
-        self.Ti_exp_init = Ti_experiment_initial
-        self.intensity_full_width_at_half_maximum = intensity_full_width_at_half_maximum
-        # self.temperature_full_width_at_half_maximum = temperature_full_width_at_half_maximum
-        self.T_measurement_radius = temperature_width
+        self.Te_full_width_at_half_maximum = Te_full_width_at_half_maximum
         self.Te_experiment_is_peak = Te_experiment_is_peak
+
+        if ion_temperature_model == 'gaussian':
+            self.Ti_exp_init = Ti_experiment_initial
         self.ion_temperature_model = ion_temperature_model
         self.electron_temperature_model  = electron_temperature_model
         self.ion_temperature_file = ion_temperature_file 
@@ -134,7 +134,7 @@ class Experiment():
                 self.Te_peak = float(sol.x)
                 print("Initial peak T_electron converged: ", sol.x, sol.success, sol.message)
 
-        print("Te_max = {0:.3e} K".format(self.Te_peak))
+        # print("Te_max = {0:.3e} K".format(self.Te_peak))
         self.Te = self.T_distribution(self.Te_peak)
         
 
@@ -143,20 +143,19 @@ class Experiment():
         
         self.T_room = 300
         
-        Γ = self.intensity_full_width_at_half_maximum/2
+        Γ = self.Te_full_width_at_half_maximum/2
         self.T_distribution = lambda T_max : T_max* (Γ**2 / ( r**2 + Γ**2 ))**(1/4) # 1/4 since really Lorentzian is a fit to Intensity
 
         self.make_Te_profile()
 
 
-    def make_gaussian_Te_profile(self, power=1): #generic super gaussian, with power=1 corresponding to regular gaussian
+    def make_gaussian_Te_profile(self): #generic super gaussian, with power=1 corresponding to regular gaussian
 
         r = self.grid.r
-
-        # σ = np.sqrt( (self.intensity_full_width_at_half_maximum/2)**2/np.log(2)/2)
         
         self.T_room = 300
-        self.T_distribution = lambda T_max: T_max*np.exp(-np.log(2)* ( 4*r**2/self.intensity_full_width_at_half_maximum**2)**self.super_gaussian_power )+ self.T_room #Gaussian Laser
+    
+        self.T_distribution = lambda T_max: T_max*np.exp(-np.log(2)* ( 4*r**2/self.Te_full_width_at_half_maximum**2)**self.super_gaussian_power )+ self.T_room #Gaussian Laser
         
         self.make_Te_profile()
 
@@ -288,7 +287,6 @@ class Measurements():
         self.ρ_grid = np.sqrt(self.X**2 + self.Z**2)
         
         self.make_parameter_grids()
-        self.make_eff_parameters()
         self.make_spectral_parameters()
         self.fit_Te_with_spectral_Intensity()
 
@@ -327,9 +325,8 @@ class Measurements():
         self.Ieff_unnormalized = np.array([np.sum(self.dz*self.Te_grid[x_i]**4*self.εeff_grid[x_i])/1e16 for x_i in range(len(self.x))])
 
     def make_spectral_parameters(self):
-        self.ωs = k_B/hbar*np.geomspace(np.min(self.Te_grid*0.5), np.max(self.Te_grid*100),num=200 )
-        self.dω = self.ωs[1:]-self.ωs[:-1]
-        self.λs = 2*π*c/self.ωs[::-1]
+        self.λs = np.geomspace(0.2*2.897e-3/np.max(self.Te_grid), 2*2.897e-3/np.min(self.Te_grid),num=100 )
+        self.ωs = 2*π*c/self.λs
         self.dλ = self.λs[1:]-self.λs[:-1]
 
         self.κ_grid = jt_mod.photon_absorption_coefficient(self.ωs[np.newaxis,np.newaxis,:], self.m_i,
@@ -340,22 +337,23 @@ class Measurements():
                                                             self.Zbar_grid[:,:,np.newaxis])
         self.κ_grid = np.nan_to_num(self.κ_grid, nan=1e10)
 
-        self.Bω_grid = jt_mod.photon_angular_frequency_density(self.ωs[np.newaxis,np.newaxis,:],self.Te_grid[:,:,np.newaxis])
         self.Bλ_grid = jt_mod.photon_wavelength_density(self.λs[np.newaxis,np.newaxis,:],self.Te_grid[:,:,np.newaxis])
 
         self.ε_grid = self.make_ε_grid() 
-        self.Iω_grid = self.Bω_grid * self.ε_grid
         self.Iλ_grid = self.Bλ_grid * self.ε_grid
-        # ω
-        self.Iω_unnormalized_of_r = np.array([np.sum(self.Iω_grid[x_i], axis=0) for x_i in range(len(self.x))])
-        self.Iω_unnormalized = np.sum(self.Iω_unnormalized_of_r*self.dx, axis=0)
-        self.I_unnormalized_of_r = np.sum(self.Iω_unnormalized_of_r[:,1:]*self.dω[np.newaxis,:], axis=1)
-        # λ
+
         self.Iλ_unnormalized_of_r = np.array([np.sum(self.Iλ_grid[x_i], axis=0) for x_i in range(len(self.x))])
         self.Iλ_unnormalized = np.sum(self.Iλ_unnormalized_of_r*self.dx, axis=0)
+        self.I_unnormalized_of_r = np.sum(self.Iλ_unnormalized_of_r[:,1:]*self.dλ[np.newaxis,:], axis=1)
         
-        FWHM_index = np.argmin(np.abs(self.I_unnormalized_of_r-np.max(self.I_unnormalized_of_r)/2 )) 
-        self.FWHM = np.abs(2*self.x[FWHM_index])
+        def gaussian(x, FWHM , P):
+            return np.exp(-np.log(2)* ( 4*x**2/FWHM**2)**P )
+
+
+        FWHM_fit = curve_fit(gaussian, self.x, self.I_unnormalized_of_r/np.max(self.I_unnormalized_of_r), p0=(50e-6,1))
+        self.I_of_r_fit = gaussian(self.x, *FWHM_fit[0])
+        self.FWHM = FWHM_fit[0][0]
+        
 
     def plot_parameter(self, parameter_grid, label=''):
         plt.figure(figsize=(10, 7))
@@ -372,7 +370,8 @@ class Measurements():
 
         plt.show()
         
-    def plot_emissivity_and_intensity(self,Intensity_grid):
+    def plot_emissivity_and_intensity(self):
+        self.make_eff_parameters()
         # Gridspec is now 2x2 with sharp width ratios
         gs = gridspec.GridSpec(2,2,height_ratios=[4,1],width_ratios=[20,1])
         fig = plt.figure(figsize=(8,6))
@@ -389,11 +388,12 @@ class Measurements():
         lax = fig.add_subplot(gs[2], sharex=cax)
 
         # Create the Intensity plot
-        lax.plot(self.X[:,0]*1e6, Intensity_grid/np.max(Intensity_grid), color='b')
-        lax.set_xlabel('x (μm)', fontsize=20)
-        lax.set_ylabel('Intensity', fontsize=20)
+        # lax.plot(self.X[:,0]*1e6, Intensity_grid/np.max(Intensity_grid), 'b.')
+        lax.plot(self.x*1e6, self.I_of_r_fit, 'b-')
+        lax.set_xlabel('x (μm)', fontsize=15)
+        lax.set_ylabel('Intensity', fontsize=15)
         lax.tick_params(labelsize=20)
-        lax.set_ylim(0,1)
+        lax.set_ylim(0,1.1)
 
         props = dict(boxstyle='round', facecolor='white', alpha=0.5)
         
@@ -413,23 +413,24 @@ class Measurements():
         plt.show()
         
     def fit_Te_with_spectral_Intensity(self):
-        test_Boltzmann = lambda Te: jt_mod.photon_wavelength_density(self.λs, Te)
-        f_to_min = lambda Te: np.linalg.norm( self.Iλ_unnormalized/np.max(self.Iλ_unnormalized) - test_Boltzmann(Te)/np.max(test_Boltzmann(Te)) )
-        sol = root(f_to_min, 1e4)
+        self.test_Boltzmann = lambda Te: jt_mod.photon_wavelength_density(self.λs, Te)
+        f_to_min = lambda Te: np.linalg.norm( self.Iλ_unnormalized/np.max(self.Iλ_unnormalized) - self.test_Boltzmann(Te)/np.max(self.test_Boltzmann(Te)) )
+        λ_peak = self.λs[np.argmax(self.Iλ_unnormalized/np.max(self.Iλ_unnormalized))]
+        T_peak = 2.897e-3/λ_peak
+        sol = minimize(f_to_min, T_peak)
         self.Te_fit = float(sol.x)
-        self.spectral_intensity_fit = test_Boltzmann(self.Te_fit)
-
+        self.spectral_intensity_fit = self.test_Boltzmann(self.Te_fit)
+        
     def plot_spectral_Intensity(self):
-        self.fit_Te_with_spectral_Intensity()
-
-        plt.figure(figsize=(8, 6))
-        plt.plot(self.λs*1e9, self.Iλ_unnormalized/np.max(self.Iλ_unnormalized), label="Integrated over profile")
+        plt.figure(figsize=(6, 4))
+        plt.plot(self.λs*1e9, self.Iλ_unnormalized/np.max(self.Iλ_unnormalized),'.',  label="Integrated over profile")
         plt.plot(self.λs*1e9, self.spectral_intensity_fit/np.max(self.spectral_intensity_fit), label="Te={0:.2f} kK".format(self.Te_fit*1e-3))
 
         plt.xlabel('λ [nm]', fontsize=20)
         plt.ylabel('Normalized Intensity', fontsize=20)
         plt.xscale('log')
-        plt.legend(fontsize=20)
+        plt.legend(fontsize=12)
         plt.tick_params(labelsize=20)
+        plt.ylim(0,1.1)
 
         plt.show()
