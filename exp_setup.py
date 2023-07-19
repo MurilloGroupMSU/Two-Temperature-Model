@@ -16,6 +16,10 @@ from physics import SMT as smt_mod
 from constants import *
 
 
+import matplotlib.gridspec as gridspec
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+
 from scipy.optimize import root
 
 class Cylindrical_Grid():
@@ -265,3 +269,167 @@ class Experiment():
         print("Γ_ei = {0:.2f}".format(params.Gamma(self.n_e, self.Te, Z=1)[0] ))
         print("Γ_ii = {0:.2f}".format(params.Gamma(self.n_i, self.Ti, Z=1)[0] ))
 
+class Measurements():
+    
+    def __init__(self, Z, A, r_array, n_e_array, n_i_array, Te_array, Ti_array, R_max = 100e-6, Nx = 100, Nz=500):
+        self.Z, self.A = Z, A
+        self.r_array  = r_array
+        self.n_e_array = n_e_array
+        self.n_i_array = n_i_array
+        self.Te_array  = Te_array
+        self.Ti_array  = Ti_array
+        self.Zbar_array= self.n_e_array/self.n_i_array
+        
+        self.m_i = A*m_p
+        
+        self.x, self.z = np.linspace(-R_max,R_max, num=Nx), np.linspace(-R_max,R_max, num=Nz)
+        self.dx, self.dz = self.x[1]-self.x[0], self.z[1]-self.z[0]
+        self.X, self.Z = np.meshgrid(self.x,self.z, indexing='ij')
+        self.ρ_grid = np.sqrt(self.X**2 + self.Z**2)
+        
+        self.make_parameter_grids()
+        self.make_eff_parameters()
+        self.make_spectral_parameters()
+        self.fit_Te_with_spectral_Intensity()
+
+    def convert_r_array_to_grid(self, array, fill_value='extrapolate'):
+        array_func = interp1d(self.r_array, array, bounds_error=False, fill_value=fill_value)
+        grid = array_func(self.ρ_grid)
+        return grid
+
+    def make_parameter_grids(self):
+        self.n_e_grid = self.convert_r_array_to_grid(self.n_e_array)
+        self.n_i_grid = self.convert_r_array_to_grid(self.n_i_array)
+        self.Te_grid  = self.convert_r_array_to_grid(self.Te_array)
+        self.Ti_grid  = self.convert_r_array_to_grid(self.Ti_array)
+        self.Zbar_grid= self.convert_r_array_to_grid(self.Zbar_array)
+        
+    def make_εeff_grid(self):
+        self.ε_grid = np.zeros_like(self.κeff_grid)
+        for x_i in range(self.κeff_grid.shape[0]):
+            for z_i in range(self.κeff_grid.shape[1]):
+                self.ε_grid[x_i, z_i] = np.exp(-np.sum(self.dz*self.κeff_grid[x_i,:z_i]))
+        return self.ε_grid
+
+    def make_ε_grid(self):
+        self.ε_grid = np.zeros((len(self.x), len(self.z), len(self.ωs)))
+        for x_i in range(len(self.x)):
+            for z_i in range(len(self.z)):
+                self.ε_grid[x_i, z_i, :] = np.exp(-np.sum(self.κ_grid[x_i,:z_i,:]*self.dz,axis=0))
+        return self.ε_grid
+
+    def make_eff_parameters(self):
+        self.κeff_grid = np.nan_to_num(jt_mod.effective_photon_absorption_coefficient(self.m_i, self.n_i_grid, 
+                                                                                       self.n_e_grid, self.Ti_grid, 
+                                                                                       self.Te_grid, self.Zbar_grid), nan=1e8)
+        self.εeff_grid = self.make_εeff_grid() 
+        self.Ieff_grid = self.Te_grid**4*self.εeff_grid
+        self.Ieff_unnormalized = np.array([np.sum(self.dz*self.Te_grid[x_i]**4*self.εeff_grid[x_i])/1e16 for x_i in range(len(self.x))])
+
+    def make_spectral_parameters(self):
+        self.ωs = k_B/hbar*np.geomspace(np.min(self.Te_grid*0.5), np.max(self.Te_grid*100),num=200 )
+        self.dω = self.ωs[1:]-self.ωs[:-1]
+        self.λs = 2*π*c/self.ωs[::-1]
+        self.dλ = self.λs[1:]-self.λs[:-1]
+
+        self.κ_grid = jt_mod.photon_absorption_coefficient(self.ωs[np.newaxis,np.newaxis,:], self.m_i,
+                                                            self.n_i_grid[:,:,np.newaxis], 
+                                                            self.n_e_grid[:,:,np.newaxis], 
+                                                            self.Ti_grid[:,:,np.newaxis], 
+                                                            self.Te_grid[:,:,np.newaxis], 
+                                                            self.Zbar_grid[:,:,np.newaxis])
+        self.κ_grid = np.nan_to_num(self.κ_grid, nan=1e10)
+
+        self.Bω_grid = jt_mod.photon_angular_frequency_density(self.ωs[np.newaxis,np.newaxis,:],self.Te_grid[:,:,np.newaxis])
+        self.Bλ_grid = jt_mod.photon_wavelength_density(self.λs[np.newaxis,np.newaxis,:],self.Te_grid[:,:,np.newaxis])
+
+        self.ε_grid = self.make_ε_grid() 
+        self.Iω_grid = self.Bω_grid * self.ε_grid
+        self.Iλ_grid = self.Bλ_grid * self.ε_grid
+        # ω
+        self.Iω_unnormalized_of_r = np.array([np.sum(self.Iω_grid[x_i], axis=0) for x_i in range(len(self.x))])
+        self.Iω_unnormalized = np.sum(self.Iω_unnormalized_of_r*self.dx, axis=0)
+        self.I_unnormalized_of_r = np.sum(self.Iω_unnormalized_of_r[:,1:]*self.dω[np.newaxis,:], axis=1)
+        # λ
+        self.Iλ_unnormalized_of_r = np.array([np.sum(self.Iλ_grid[x_i], axis=0) for x_i in range(len(self.x))])
+        self.Iλ_unnormalized = np.sum(self.Iλ_unnormalized_of_r*self.dx, axis=0)
+        
+        FWHM_index = np.argmin(np.abs(self.I_unnormalized_of_r-np.max(self.I_unnormalized_of_r)/2 )) 
+        self.FWHM = np.abs(2*self.x[FWHM_index])
+
+    def plot_parameter(self, parameter_grid, label=''):
+        plt.figure(figsize=(10, 7))
+        contour = plt.contourf(self.X*1e6, self.Z*1e6, parameter_grid, levels=100, cmap='viridis')
+
+        cbar = plt.colorbar(contour)
+        cbar.set_label(label, size=20)
+        cbar.ax.tick_params(labelsize=20)
+
+        plt.xlabel('x [μm]', fontsize=20)
+        plt.ylabel('z [μm]', fontsize=20)
+
+        plt.tick_params(labelsize=20)
+
+        plt.show()
+        
+    def plot_emissivity_and_intensity(self,Intensity_grid):
+        # Gridspec is now 2x2 with sharp width ratios
+        gs = gridspec.GridSpec(2,2,height_ratios=[4,1],width_ratios=[20,1])
+        fig = plt.figure(figsize=(8,6))
+
+        # Contour plot axis
+        cax = fig.add_subplot(gs[0])
+
+        # Create the contour plot
+        contour = cax.contourf(self.X*1e6, self.Z*1e6, self.εeff_grid, levels=100, cmap='viridis')
+        cax.set_ylabel('z (μm)', fontsize=20)
+        cax.tick_params(labelsize=20)
+
+        # Intensity plot axis
+        lax = fig.add_subplot(gs[2], sharex=cax)
+
+        # Create the Intensity plot
+        lax.plot(self.X[:,0]*1e6, Intensity_grid/np.max(Intensity_grid), color='b')
+        lax.set_xlabel('x (μm)', fontsize=20)
+        lax.set_ylabel('Intensity', fontsize=20)
+        lax.tick_params(labelsize=20)
+        lax.set_ylim(0,1)
+
+        props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+        
+        textstr = "FWHM = {0:.1f} μm".format(self.FWHM*1e6)
+        lax.text(0.03, 0.93, textstr, transform=lax.transAxes, fontsize=12,
+            verticalalignment='top', bbox=props)
+
+        # Make a subplot for the colour bar
+        bax = fig.add_subplot(gs[1])
+
+        # Use general colour bar with specific axis given.
+        cbar = plt.colorbar(contour, cax=bax)
+        cbar.set_label('Emissivity Estimate', size=20)
+        cbar.ax.tick_params(labelsize=20)
+
+        plt.tight_layout()
+        plt.show()
+        
+    def fit_Te_with_spectral_Intensity(self):
+        test_Boltzmann = lambda Te: jt_mod.photon_wavelength_density(self.λs, Te)
+        f_to_min = lambda Te: np.linalg.norm( self.Iλ_unnormalized/np.max(self.Iλ_unnormalized) - test_Boltzmann(Te)/np.max(test_Boltzmann(Te)) )
+        sol = root(f_to_min, 1e4)
+        self.Te_fit = float(sol.x)
+        self.spectral_intensity_fit = test_Boltzmann(self.Te_fit)
+
+    def plot_spectral_Intensity(self):
+        self.fit_Te_with_spectral_Intensity()
+
+        plt.figure(figsize=(8, 6))
+        plt.plot(self.λs*1e9, self.Iλ_unnormalized/np.max(self.Iλ_unnormalized), label="Integrated over profile")
+        plt.plot(self.λs*1e9, self.spectral_intensity_fit/np.max(self.spectral_intensity_fit), label="Te={0:.2f} kK".format(self.Te_fit*1e-3))
+
+        plt.xlabel('λ [nm]', fontsize=20)
+        plt.ylabel('Normalized Intensity', fontsize=20)
+        plt.xscale('log')
+        plt.legend(fontsize=20)
+        plt.tick_params(labelsize=20)
+
+        plt.show()

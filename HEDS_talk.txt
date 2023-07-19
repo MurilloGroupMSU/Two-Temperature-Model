@@ -1,0 +1,30 @@
+Talk review
+
+
+- idea is to explain how difficult normal experiments are of tranposrt and eos
+- show laser breadown gas vs UNP and Warm dense exp's
+	- parameter space plot by Gautham
+	
+	
+	
+	
+	
+	
+Seth Talk ideas- more exp focused
+_______
+- include S_γ, say raidation tranposrt etc. zero
+- show experiment is black blody
+- FWHM behaviour
+
+
+Key results:
+	- large dih of ions - "bond softening" or "non-thermal melting"
+	- thermal conduction slow
+	- closed system? Doesn't lose energy to environment
+	- 
+
+
+___________________________________________
+
+
+

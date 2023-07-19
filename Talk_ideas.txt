@@ -1,0 +1,34 @@
+MM & ZJ talk flow:
+
+Intro:
+	- need to model WDM/HEDS
+		- Fraley paper hydro
+		-unkowns: EOS/transport
+	-background for other experiments  
+		-include TCCW info? 
+	- other possibilites
+		-UNP’s, + high pressure gases
+			-gases for arbitrary mixtures (Bergeson for UNP)
+		-Show Gautham Dharuman regime plot
+
+Experiment:
+	-Pictures of experiments
+	-Setup with laser
+	-Show what they measure (Te, Intensity)
+		-other measurements
+			-transmission paper for fixed wavelengths (done H)
+			-x-ray backlight (from water) for S(k)
+			-ion Doppler 
+			-Thompson scattering (Zbar, ne, Te)
+	-Define “initial conditions” of experiment
+		-’fast’ timescales things: laser ~ 100 fs
+		-’slow’ e-i equilibration, expansion, conduction?
+	-Map initial measurements to initial conditions of experiments
+	-’slow’ stuff  goes into hydro simulation
+		-describe
+		-show missing terms in Fraley (or added)
+	-Statistics/Results: how sensitive measurements are to G (e-i rate), etc.
+		-how closed is system- does this effect observables 
+Future:
+	-Xe/He ‘highly asymmetric mixtures’ possibility
+	-many epicycles

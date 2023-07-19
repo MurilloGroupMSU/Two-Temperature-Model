@@ -22,7 +22,7 @@ Experimental Questions to Address:
 
 	1. How is Intensity measured independently of Temperature, to get emmissivity?
 	2. How is Intensity measured as a function of radius?
-	
+	3. Is the entensity shown as a function of radius 3
 		
 		
 		

@@ -5,7 +5,7 @@ Hydrodynamics:
 						- Thermal Kinetic energy is directly related to Temperature, ideal specific heat built in, no potential energy
 
 Ionization:
-	Currently assuming: - Zbar from Thomas-Fermi with exponential cutoff at low T
+	Currently assuming: - Zbar from Thomas-Fermi, no dynamics of recombination etc. 
 
 
 Experiment:
@@ -18,5 +18,12 @@ Photons:
 											- Ignoring all scattering and assuming photons all come from direct line of sight
 											- Instead of integrating over wavelengths, assuming absorption coefficients given by average frequency (ω_av = E_av/hbar = 2.701 k_B Tγ/hbar )
 
+Electric Fields:
+	Currently assuming: - Assuming none
+											- NO ambipolar diffusion
+											
+											
 Improvements:
 	- 
+	
+	
