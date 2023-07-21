@@ -121,6 +121,11 @@ class Physical_Parameters():
     def electron_plasma_frequency(n_e):
         return np.sqrt( n_e*ee**2 / (m_e*ε_0) )
 
+
+    @staticmethod
+    def ion_plasma_frequency(n_i, m_i, Z_i):
+        return np.sqrt( n_i*(Z_i*ee)**2 / (m_i*ε_0) )
+
     @staticmethod
     def Thomas_Fermi_Zbar(Z, num_density, T):
         """
@@ -684,6 +689,8 @@ class Fraley(Physical_Parameters):
         Free electron model modifcation to classical result
         Args: 
             n_e: electron number density [1/m^3]
+        Returns:
+            c_e: specific heat [ k_B/m^3]
         """
         Ce_ideal = 3/2 * k_B * n_e # Electron ideal gas heat capacity
         

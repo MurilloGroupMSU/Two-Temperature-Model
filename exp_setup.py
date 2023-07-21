@@ -210,7 +210,7 @@ class Experiment():
             None
         """
         Zbar = self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
-        return Zbar*(np.exp(-2000**2/Te**2)+1e-5)
+        return Zbar*(np.exp(-4000**2/Te**2)+1e-5)
 
     def set_ionization(self):
         """
@@ -381,6 +381,49 @@ class Measurements():
 
         # Create the contour plot
         contour = cax.contourf(self.X*1e6, self.Z*1e6, self.εeff_grid, levels=100, cmap=cmap)
+        cax.set_ylabel('z (μm)', fontsize=20)
+        cax.tick_params(labelsize=20)
+
+        # Intensity plot axis
+        lax = fig.add_subplot(gs[2], sharex=cax)
+
+        # Create the Intensity plot
+        # lax.plot(self.X[:,0]*1e6, Intensity_grid/np.max(Intensity_grid), 'b.')
+        lax.plot(self.x*1e6, self.I_of_r_fit, 'b-')
+        lax.set_xlabel('x (μm)', fontsize=15)
+        lax.set_ylabel('Intensity', fontsize=15)
+        lax.tick_params(labelsize=20)
+        lax.set_ylim(0,1.1)
+
+        props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+        
+        textstr = "FWHM = {0:.1f} μm".format(self.FWHM*1e6)
+        lax.text(0.03, 0.93, textstr, transform=lax.transAxes, fontsize=12,
+            verticalalignment='top', bbox=props)
+
+        # Make a subplot for the colour bar
+        bax = fig.add_subplot(gs[1])
+
+        # Use general colour bar with specific axis given.
+        cbar = plt.colorbar(contour, cax=bax)
+        cbar.set_label('Emissivity Estimate', size=20)
+        cbar.ax.tick_params(labelsize=20)
+
+        plt.tight_layout()
+        plt.show()
+
+
+    def plot_emitted_intensity(self, cmap = 'viridis'):
+        self.make_eff_parameters()
+        # Gridspec is now 2x2 with sharp width ratios
+        gs = gridspec.GridSpec(2,2,height_ratios=[4,1],width_ratios=[20,1])
+        fig = plt.figure(figsize=(8,6))
+
+        # Contour plot axis
+        cax = fig.add_subplot(gs[0])
+
+        # Create the contour plot
+        contour = cax.contourf(self.X*1e6, self.Z*1e6, self.Iλ_grid, levels=100, cmap=cmap)
         cax.set_ylabel('z (μm)', fontsize=20)
         cax.tick_params(labelsize=20)
 

@@ -11,13 +11,15 @@ from physics import SMT as smt_mod
 from constants import *
 
 from scipy.optimize import root
+from scipy.special import lambertw as W0
+
 
 class HydroModel():
     """
     Implements a two temperature model of a plasma as a cylinder
     """
 
-    def __init__(self, Experiment, model = "SMT"):
+    def __init__(self, Experiment, model = "SMT", electron_model = 'equilibrium'):
         self.experiment = Experiment
         self.grid = Experiment.grid
 
@@ -29,6 +31,7 @@ class HydroModel():
 
         self.Zbar = Experiment.Zbar
         self.m_i = self.experiment.m_i
+        self.electron_model = electron_model
 
         self.gamma = 5/3
         if model == "SMT":
@@ -91,15 +94,26 @@ class HydroModel():
         """
         Assuming Ideal pressure right now
         """
-        P_e = k_B*self.n_e * self.Te
-        return P_e
 
+        P_e_ideal = k_B*self.n_e * self.Te
+        Γee = jt_mod.Gamma(self.n_e, self.Te, Z = 1)
+        λ_tot = jt_mod.total_Debye_length(self.n_e, self.n_i, self.Ti, self.Te, self.Zbar)
+        ae = jt_mod.r_WignerSeitz(self.n_e)
+        
+        P_e_ex    = -2/3*π*self.n_e**2 * (ee**2/(4*π*ε_0))**2/(self.Te*k_B)*λ_tot* np.exp(-W0(Γee*ae/λ_tot) )
+        return P_e_ideal + P_e_ex
+        
     def get_Pi(self):
         """
         Assuming Ideal pressure right now
         """
-        P_i = k_B*self.n_i * self.Ti
-        return P_i
+        
+        P_i_ideal = k_B*self.n_i * self.Ti
+        Γii = jt_mod.Gamma(self.n_i, self.Ti, Z=self.Zbar)
+        λ_tot = jt_mod.total_Debye_length(self.n_e, self.n_i, self.Ti, self.Te, self.Zbar)
+        ai = jt_mod.r_WignerSeitz(self.n_i)
+        P_i_ex    = -2/3*π*self.n_i**2 * (self.Zbar**2*ee**2/(4*π*ε_0))**2/(self.Ti*k_B)*λ_tot* np.exp(-W0(Γii*ai/λ_tot) )
+        return P_i_ideal + P_i_ex
 
 
     def get_Ek_i(self):
@@ -117,13 +131,17 @@ class HydroModel():
     def get_Ti_from_Ei(self, Eki, ni):
         return 2/3 * Eki/ni/k_B  
 
-    def get_Te_and_Zbar(self, Ek_e, n_i):
-        Zbar = lambda Te: self.experiment.get_ionization(self.experiment.Z, n_i, Te)
-        # Te_guess = 2/3 * Ek/(ni*Zbar*k_B)
-        f_to_min_Te = lambda Te: np.abs(Te - 2/3 * Ek_e/(n_i*Zbar(Te)*k_B) )
-        sol = root(f_to_min_Te, self.Te )
-        Te = sol.x
-        return Te, Zbar(Te)
+    def get_Te(self, Ek_e, n_i, Zbar=None):
+        Te_func = lambda n_e: 2/3 * Ek_e/(n_e*k_B)
+        if np.all(Zbar==None):
+            Zbar_TF = lambda Te: self.experiment.get_ionization(self.experiment.Z, n_i, Te)
+            f_to_min_Te = lambda Te: np.abs(Te - Te_func(n_i*Zbar_TF(Te)) )
+            sol = root(f_to_min_Te, self.Te )
+            Te = sol.x
+            Zbar = Zbar_TF(Te)
+        else:
+            Te = Te_func(Zbar*n_i)
+        return Te, Zbar
 
     def get_FWHM(self):
         FWHM_index = np.argmin(np.abs(self.Te - 0.5*self.Te[0]))
@@ -197,8 +215,15 @@ class HydroModel():
             # self.n_e[:-1] = self.n_e[:-1] - self.dt * net_flux_ne/self.grid.cell_volumes
 
             # self.Zbar = self.experiment.get_ionization(self.experiment.Z, self.n_i, self.Te)
-            self.Te, self.Zbar = self.get_Te_and_Zbar(self.Ek_e, self.n_i)
-            self.n_e = self.n_i*self.Zbar # enforce quasineutrality
+            if self.electron_model == 'equilibrium':
+                self.Te, self.Zbar = self.get_Te(self.Ek_e, self.n_i)
+                self.n_e = self.n_i*self.Zbar # enforce quasineutrality
+            elif self.electron_model == 'fixed_Zbar':
+                flux_ne = 2*π*self.grid.r * self.n_e * self.v
+                net_flux_ne = flux_ne[1:] - flux_ne[:-1]
+                self.n_e[:-1] = self.n_e[:-1] - self.dt * net_flux_ne/self.grid.cell_volumes
+                self.Zbar = self.n_e/self.n_i
+                self.Te, _ = self.get_Te(self.Ek_e, self.n_i, Zbar = self.Zbar) 
 
             # Update velocities
             self.v[:-1] = self.v[:-1] + self.dt * (

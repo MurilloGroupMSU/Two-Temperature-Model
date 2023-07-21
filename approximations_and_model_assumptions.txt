@@ -17,7 +17,7 @@ Photons:
 											- Ignoring Langdon and ion screening effects (See "Inverse Bremsstrahlung Absorption" Turnbull et al.)
 											- Ignoring all scattering and assuming photons all come from direct line of sight
 											- Instead of integrating over wavelengths, assuming absorption coefficients given by average frequency (ω_av = E_av/hbar = 2.701 k_B Tγ/hbar )
-
+	Issues:  			- Currently mean free path is > FWHM, meaning all photons escape. How is a blackbody formed?
 Electric Fields:
 	Currently assuming: - Assuming none
 											- NO ambipolar diffusion

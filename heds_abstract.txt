@@ -1,0 +1,7 @@
+
+"University Scale Experiments for Modeling Energy Transport in Strongly Coupled Plasmas" 
+
+Modeling the physics of high-energy density plasmas (HEDP) is of critical importance to fusion technology, and in diverse astrophysical settings. In particular, microscopic closure information in the form of equations of state and transport coefficients are needed to have robust predictive capability. In general, these processes tend to be too integrated in typical HEDP experiments (NIF, Omega, Z) to isolate for validation purposes. Much of this physics, however, depends on dimensionless parameters that can be also be achieved in much smaller scale experiments. In particular, the laser-breakdown of noble gases achieves strong coupling in a regime with largely classical electrons and moderate pressures. In this talk, we focus on laser breakdown experiments done at UCLA [1.] and describe our efforts to model this system with two temperature hydrodynamics. We explored the sensitivity of this experiment to models for electron-ion thermalization rates, the equation of state, and energy transport. We conclude with an outlook for the promising future directions for laser breakdown plasmas.
+
+1. A. Bataller,* G. R. Plateau, B. Kappus, and S. Putterman, Phys. Rev. Lett. 113, 075001 (2014)  
+  
