@@ -106,16 +106,16 @@ class HydroModel():
         """
         Thermal kinetic energy density
         """
-        return 3/2 * k_B*self.Ti * self.n_i
+        return 3/2 * k_B*self.Ti * self.n_i 
 
     def get_Ek_e(self):
         """
         Thermal kinetic energy density
         """
-        return 3/2 * k_B * self.Te * self.n_e
+        return 3/2 * k_B * self.Te * self.n_e 
 
     def get_Ti_from_Ei(self, Eki, ni):
-        return 2/3 * Eki/ni/k_B
+        return 2/3 * Eki/ni/k_B  
 
     def get_Te_and_Zbar(self, Ek_e, n_i):
         Zbar = lambda Te: self.experiment.get_ionization(self.experiment.Z, n_i, Te)
@@ -144,13 +144,13 @@ class HydroModel():
         self.t_saved_list = []
         self.Te_list, self.Ti_list = [self.Te.copy()], [self.Ti.copy()]
         self.Ek_e_list = [self.get_Ek_e()   ]
-        self.v_list = [np.zeros_like(self.Te)]
         self.P_list = [np.zeros_like(self.n_e)]
         self.n_e_list = [self.n_e.copy()]
         self.n_i_list = [self.n_i.copy()]
         self.FWHM_list = [self.get_FWHM()]
         
         self.v = np.zeros_like(self.n_e) # initialize velocity at zero
+        self.v_list = [self.v.copy()]
 
         for i, t in enumerate(self.t_list[:-1]):
             # Calculate new temperatures using explicit Euler method, finite volume, and relaxation
@@ -158,7 +158,9 @@ class HydroModel():
             G  = self.G(self.n_e, self.n_i, self.Zbar, self.Te,self.Ti) 
             Ce = self.params.electron_heat_capacity(self.n_e, self.Te)[:-1]
             Ci = self.params.ion_heat_capacity(self.n_i, self.Ti)[:-1]
-            
+            ke = self.params.electron_thermal_conductivity(self.n_e, self.n_i, self.m_i, self.Zbar, self.Te, self.Ti)
+            ki = self.params.ion_thermal_conductivity(self.n_e, self.n_i, self.m_i, self.Zbar, self.Te, self.Ti)
+
             self.P = self.get_P()
             self.Ek_i = self.get_Ek_i()
             self.Ek_e = self.get_Ek_e()
@@ -167,7 +169,8 @@ class HydroModel():
             P_grad = self.grad(self.P) # Calculate gradient of pressure
             # Energy equation
             # ion
-            flux_Ek_i = 2*π*self.grid.r * self.v * (self.Ek_i + self.get_Pi())
+            flux_Ek_i = 2*π*self.grid.r*(  - 0*ki*self.grad(self.Ti) +  self.v * (self.Ek_i + self.get_Pi())  )
+            # flux_Ek_i = 2*π*self.grid.r*(   self.v * (self.Ek_i + self.get_Pi())  )
             net_flux_Ek_i = flux_Ek_i[1:]  - flux_Ek_i[:-1]
             self.Ek_i[:-1] = self.Ek_i[:-1] + self.dt * ( 
                     - net_flux_Ek_i/self.grid.cell_volumes
@@ -175,7 +178,8 @@ class HydroModel():
                     )
 
             # electron
-            flux_Ek_e = 2*π*self.grid.r * self.v * (  self.Ek_e + self.get_Pe() )
+            flux_Ek_e = 2*π*self.grid.r*( - 0*ke*self.grad(self.Te)  + self.v*(  self.Ek_e + self.get_Pe() ))
+            # flux_Ek_e = 2*π*self.grid.r*(  self.v*(  self.Ek_e + self.get_Pe() ))
             net_flux_Ek_e = flux_Ek_e[1:]  - flux_Ek_e[:-1]
             self.Ek_e[:-1] = self.Ek_e[:-1] + self.dt * ( 
                     - net_flux_Ek_e/self.grid.cell_volumes

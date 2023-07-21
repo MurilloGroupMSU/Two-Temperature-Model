@@ -32,3 +32,11 @@ Experiment:
 Future:
 	-Xe/He ‘highly asymmetric mixtures’ possibility
 	-many epicycles
+	
+	
+________________________________________________________________
+TO DO Before Talk
+Statistical/Sensitivity Analysis
+
+Fit 
+

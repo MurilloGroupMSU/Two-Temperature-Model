@@ -370,7 +370,7 @@ class Measurements():
 
         plt.show()
         
-    def plot_emissivity_and_intensity(self):
+    def plot_emissivity_and_intensity(self, cmap = 'viridis'):
         self.make_eff_parameters()
         # Gridspec is now 2x2 with sharp width ratios
         gs = gridspec.GridSpec(2,2,height_ratios=[4,1],width_ratios=[20,1])
@@ -380,7 +380,7 @@ class Measurements():
         cax = fig.add_subplot(gs[0])
 
         # Create the contour plot
-        contour = cax.contourf(self.X*1e6, self.Z*1e6, self.εeff_grid, levels=100, cmap='viridis')
+        contour = cax.contourf(self.X*1e6, self.Z*1e6, self.εeff_grid, levels=100, cmap=cmap)
         cax.set_ylabel('z (μm)', fontsize=20)
         cax.tick_params(labelsize=20)
 
