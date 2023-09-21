@@ -320,7 +320,7 @@ class Physical_Parameters():
         Returns:
             κ: absorption coefficient [1/m]
         """
-        κ=1/cls.photon_mean_free_path(ω, m_i, n_i, n_e, Ti, Te, Zbar)
+        κ=1/cls.photon_mean_free_path(ω, m_i, n_i, n_e, Ti, Te, Zbar) # Seth method from Bataller
         # ωp = cls.electron_plasma_frequency(n_e)
         # νei = 1/cls.ei_relaxation_times(n_e, n_i, m_i, Zbar, Te, Ti)[0] 
         # κ = 1/c * νei * (ωp/ω)**2 * 1/np.sqrt(1-(ωp/ω)**2) 
