@@ -319,7 +319,7 @@ class Measurements():
     def make_eff_parameters(self):
         self.κeff_grid = np.nan_to_num(jt_mod.effective_photon_absorption_coefficient(self.m_i, self.n_i_grid, 
                                                                                        self.n_e_grid, self.Ti_grid, 
-                                                                                       self.Te_grid, self.Zbar_grid), nan=1e8)
+                                                                                       self.Te_grid), nan=1e8)
         self.εeff_grid = self.make_εeff_grid() 
         self.Ieff_grid = self.Te_grid**4*self.εeff_grid
         self.Ieff_unnormalized = np.array([np.sum(self.dz*self.Te_grid[x_i]**4*self.εeff_grid[x_i])/1e16 for x_i in range(len(self.x))])
@@ -333,8 +333,8 @@ class Measurements():
                                                             self.n_i_grid[:,:,np.newaxis], 
                                                             self.n_e_grid[:,:,np.newaxis], 
                                                             self.Ti_grid[:,:,np.newaxis], 
-                                                            self.Te_grid[:,:,np.newaxis], 
-                                                            self.Zbar_grid[:,:,np.newaxis])
+                                                            self.Te_grid[:,:,np.newaxis])
+                                                            
         self.κ_grid = np.nan_to_num(self.κ_grid, nan=1e10)
 
         self.Bλ_grid = jt_mod.photon_wavelength_density(self.λs[np.newaxis,np.newaxis,:],self.Te_grid[:,:,np.newaxis])
