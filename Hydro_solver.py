@@ -101,7 +101,7 @@ class HydroModel():
         ae = jt_mod.r_WignerSeitz(self.n_e)
         
         P_e_ex    = -2/3*π*self.n_e**2 * (ee**2/(4*π*ε_0))**2/(self.Te*k_B)*λ_tot* np.exp(-W0(Γee*ae/λ_tot) )
-        return P_e_ideal + P_e_ex
+        return P_e_ideal.real + P_e_ex.real
         
     def get_Pi(self):
         """
@@ -113,7 +113,7 @@ class HydroModel():
         λ_tot = jt_mod.total_Debye_length(self.n_e, self.n_i, self.Ti, self.Te, self.Zbar)
         ai = jt_mod.r_WignerSeitz(self.n_i)
         P_i_ex    = -2/3*π*self.n_i**2 * (self.Zbar**2*ee**2/(4*π*ε_0))**2/(self.Ti*k_B)*λ_tot* np.exp(-W0(Γii*ai/λ_tot) )
-        return P_i_ideal + P_i_ex
+        return P_i_ideal.real + P_i_ex.real
 
 
     def get_Ek_i(self):
@@ -131,16 +131,32 @@ class HydroModel():
     def get_Ti_from_Ei(self, Eki, ni):
         return 2/3 * Eki/ni/k_B  
 
-    def get_Te(self, Ek_e, n_i, Zbar=None):
-        Te_func = lambda n_e: 2/3 * Ek_e/(n_e*k_B)
+    def get_Te(self, Ek_e, n_i, Zbar_previous, Zbar=None, χ0_factor= 1):
+        """
+        χ0_factor allows setting recombination heating to zero by χ0_factor=0. χ0_factor=1 does nothing
+
+        Finds the temperature of the electrons at a given point using the amount of kinetic energy there, plus what is released from recombination
+        Zbar_previous is defined as Zbar(t_{i-1},x_i)
+        Erec(t_i, x_i) = (Zbar(t_i, x_i)- Zbar(t_{i-1},x_i - v Δt)) * n_i(x_i,t_i) * χ0(x_i, t_i)
+        Zbar_back_a_step = Zbar(t_{i-1},x_i- v(x_i)  Δt) ~ Zbar(t_{i-1},x_i)  - v Δt d/dx Zbar(t_{i-1},x_i) is what we actually need
+        """
+        Zbar_back_a_step = Zbar_previous - self.v*self.dt*np.gradient(Zbar_previous, self.grid.r)
+        Erec_density = lambda Zbar, Te: (Zbar_back_a_step - Zbar)*n_i*self.experiment.χ0_func(n_i, Te)*χ0_factor # positive means energy is released into electrons, since ionization decreased
+        Te_func = lambda n_e, Te: 2/3 * (Ek_e  + Erec_density(n_e/n_i, Te))/(n_e*k_B)
         if np.all(Zbar==None):
-            Zbar_TF = lambda Te: self.experiment.get_ionization(self.experiment.Z, n_i, Te)
-            f_to_min_Te = lambda Te: np.abs(Te - Te_func(n_i*Zbar_TF(Te)) )
-            sol = root(f_to_min_Te, self.Te )
+            Zbar_func = lambda Te: self.experiment.Zbar_func(n_i, Te)
+            f_to_min_Te = lambda Te: np.abs(Te - Te_func(n_i*Zbar_func(Te), Te) )
+            sol = root(f_to_min_Te, self.Te , options={'maxfev':2000})
             Te = sol.x
-            Zbar = Zbar_TF(Te)
+            if sol.success == False:
+                print("WARNING, Zbar minimizer not converge.")
+                print(sol)
+            Zbar = Zbar_func(Te)
         else:
             Te = Te_func(Zbar*n_i)
+        # print(f"Erec_density/Ek_e = {Erec_density(Zbar, Te)/Ek_e}")
+        # print(f"Erec_density = {Erec_density(Zbar)}")
+        # print(f"From get_Te: Zbar={Zbar}, ΔZbar={Zbar_back_a_step-Zbar}, Ek_e/Erec_density ={Ek_e/Erec_density(Zbar)}")        
         return Te, Zbar
 
     def get_FWHM(self):
@@ -149,7 +165,7 @@ class HydroModel():
         return FWHM
 
 
-    def solve_hydro(self, dt=None, tmax=None):
+    def solve_hydro(self, dt=None, tmax=None, χ0_factor= 1 ):
         """
         Solves TTM model using finite-volume method. 
         Args:
@@ -171,6 +187,7 @@ class HydroModel():
         self.v_list = [self.v.copy()]
 
         for i, t in enumerate(self.t_list[:-1]):
+            # print(f"Step {i}, Zbar={self.Zbar}")
             # Calculate new temperatures using explicit Euler method, finite volume, and relaxation
             
             G  = self.G(self.n_e, self.n_i, self.Zbar, self.Te,self.Ti) 
@@ -188,7 +205,6 @@ class HydroModel():
             # Energy equation
             # ion
             flux_Ek_i = 2*π*self.grid.r*(  - 0*ki*self.grad(self.Ti) +  self.v * (self.Ek_i + self.get_Pi())  )
-            # flux_Ek_i = 2*π*self.grid.r*(   self.v * (self.Ek_i + self.get_Pi())  )
             net_flux_Ek_i = flux_Ek_i[1:]  - flux_Ek_i[:-1]
             self.Ek_i[:-1] = self.Ek_i[:-1] + self.dt * ( 
                     - net_flux_Ek_i/self.grid.cell_volumes
@@ -197,12 +213,11 @@ class HydroModel():
 
             # electron
             flux_Ek_e = 2*π*self.grid.r*( - 0*ke*self.grad(self.Te)  + self.v*(  self.Ek_e + self.get_Pe() ))
-            # flux_Ek_e = 2*π*self.grid.r*(  self.v*(  self.Ek_e + self.get_Pe() ))
             net_flux_Ek_e = flux_Ek_e[1:]  - flux_Ek_e[:-1]
             self.Ek_e[:-1] = self.Ek_e[:-1] + self.dt * ( 
                     - net_flux_Ek_e/self.grid.cell_volumes
                     - (G*(self.Te - self.Ti))[:-1]
-                    )
+                    ) 
                     
 
             # Update densities with continuity equation and quasineutrality
@@ -214,10 +229,10 @@ class HydroModel():
             # net_flux_ne = flux_ne[1:] - flux_ne[:-1]
             # self.n_e[:-1] = self.n_e[:-1] - self.dt * net_flux_ne/self.grid.cell_volumes
 
-            # self.Zbar = self.experiment.get_ionization(self.experiment.Z, self.n_i, self.Te)
             if self.electron_model == 'equilibrium':
-                self.Te, self.Zbar = self.get_Te(self.Ek_e, self.n_i)
+                self.Te, self.Zbar = self.get_Te(self.Ek_e, self.n_i, self.Zbar, χ0_factor=χ0_factor) # Finds temperature including from recombination heating
                 self.n_e = self.n_i*self.Zbar # enforce quasineutrality
+                self.Ek_e = self.get_Ek_e() # Effectively adds recombination heating to Ek_e
             elif self.electron_model == 'fixed_Zbar':
                 flux_ne = 2*π*self.grid.r * self.n_e * self.v
                 net_flux_ne = flux_ne[1:] - flux_ne[:-1]

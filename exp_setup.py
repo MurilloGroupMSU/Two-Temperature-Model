@@ -9,7 +9,7 @@ import numpy as np
 from pandas import read_csv
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
-
+from scipy.interpolate import RegularGridInterpolator
 
 from physics import JT_GMS as jt_mod
 from physics import SMT as smt_mod
@@ -45,7 +45,7 @@ class Experiment():
     Initializes all physical parameters according to initial conditions of experiment.
     """
 
-    def __init__(self, grid, n0, Z, A, Te_experiment_initial, Te_full_width_at_half_maximum,
+    def __init__(self, grid, n0, Z, A, Te_experiment_initial, Te_full_width_at_half_maximum, ionization_model='TF', ionization_file = None,
                 Ti_experimental_initial = None, gas_name='Argon', model = "SMT", electron_temperature_model='lorentz', ion_temperature_model = 'electron', ion_temperature_file = None,
                 Te_experiment_is_peak=False, super_gaussian_power=1):
         """
@@ -70,6 +70,8 @@ class Experiment():
 
         if ion_temperature_model == 'gaussian':
             self.Ti_exp_init = Ti_experiment_initial
+        self.ionization_model = ionization_model # TF or input from something like Saha
+        self.ionization_file  = ionization_file  # TF or input from something like Saha
         self.ion_temperature_model = ion_temperature_model
         self.electron_temperature_model  = electron_temperature_model
         self.ion_temperature_file = ion_temperature_file 
@@ -81,7 +83,8 @@ class Experiment():
         else:
             self.params = jt_mod
         
-        self.make_n_i_profile()
+        self.make_ionization_function(self.Z)
+        self.initialize_n_i_profile()
         self.make_T_profiles()
         self.make_n_e_profile()
         self.make_physical_timescales()
@@ -125,7 +128,7 @@ class Experiment():
             # Rescale so bulk Temperature is the initial one.
             def ΔT_to_min( T_max ):
                 Te_profile = self.T_distribution(T_max)
-                ne_profile = self.get_ionization(self.Z, self.n_i, Te_profile)
+                ne_profile = self.Zbar_func(self.n_i, Te_profile)
                 bulk_T = self.get_bulk_T(Te_profile, ne_profile)
                 ΔT = bulk_T - self.Te_exp_init
                 return ΔT
@@ -201,7 +204,7 @@ class Experiment():
             self.make_MD_Ti_profile()
 
 
-    def get_ionization(self, Z, n_i, Te):
+    def make_ionization_function(self, Z):
         """
         Gets the ionization profile of the ion using TF AA fit.
         Args:
@@ -209,9 +212,62 @@ class Experiment():
         Returns:
             None
         """
-        Zbar = self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
-        return Zbar*(np.exp(-4000**2/Te**2)+1e-5)
+        if self.ionization_model == 'TF':
+            self.Zbar_func = lambda n_i, Te: self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
+            self.χ0_func   = lambda n_i, Te: 0
 
+            self.Zbar_func = np.vectorize(self.Zbar_func)
+            self.χ0_func = np.vectorize(self.χ0_func)
+
+        elif self.ionization_model == 'input':
+            N_n, N_T = 20, 100
+            saved_data = read_csv(self.ionization_file, delim_whitespace=True, header=1)
+            n_invm3_mesh = np.array(saved_data['n[1/cc]']).reshape(N_n, N_T)*1e6
+            T_K_mesh     = np.array(saved_data['T[K]']).reshape(N_n, N_T)
+            Zbar_mesh    = np.array(saved_data['Zbar']).reshape(N_n, N_T)
+            χ0_J_mesh    = np.array(saved_data['χ0[eV]']).reshape(N_n, N_T)*eV_to_J
+            
+            zbar_interp = RegularGridInterpolator((n_invm3_mesh[:,0],T_K_mesh[0,:]), Zbar_mesh, bounds_error=False)
+            χ0_interp   = RegularGridInterpolator((n_invm3_mesh[:,0],T_K_mesh[0,:]), χ0_J_mesh, bounds_error=False)
+            
+            # self.Zbar_func = lambda n_i, Te: zbar_interp( (n_i, Te) )
+            # self.χ0_func   = lambda n_i, Te: χ0_interp( (n_i, Te) )
+            # self.Zbar_func = np.vectorize(self.Zbar_func)
+            # self.χ0_func   = np.vectorize(self.χ0_func)
+
+            @np.vectorize()
+            def Zbar_func(n_i, Te):
+                # above_n_i = n_i > np.max(n_invm3_mesh[:,0])
+                # below_n_i = n_i < np.min(n_invm3_mesh[:,0])
+                above_Te  = Te > np.max(T_K_mesh[0,:])
+                below_Te  = Te < np.min(T_K_mesh[0,:])
+                
+                if above_Te:
+                    return 1.0
+                elif below_Te:
+                    return np.min(Zbar_mesh)
+                else:
+                    return zbar_interp((n_i,Te))
+
+            @np.vectorize()
+            def χ0_func(n_i, Te):
+                # above_n_i = n_i > np.max(n_invm3_mesh[:,0])
+                # below_n_i = n_i < np.min(n_invm3_mesh[:,0])
+                above_Te  = Te > np.max(T_K_mesh[0,:])
+                below_Te  = Te < np.min(T_K_mesh[0,:])
+                
+                if above_Te:
+                    n_i_closest = np.argmin( np.abs( n_invm3_mesh[:,0]-n_i ))
+                    return χ0_J_mesh[n_i_closest,-1]
+                elif below_Te:
+                    n_i_closest = np.argmin( np.abs( n_invm3_mesh[:,0]-n_i ))
+                    return χ0_J_mesh[n_i_closest,0]
+                return χ0_interp((n_i,Te))
+
+            self.Zbar_func = Zbar_func
+            self.χ0_func = χ0_func
+
+                
     def set_ionization(self):
         """
         Sets the ionization profile of the ion using TF AA fit.
@@ -220,9 +276,9 @@ class Experiment():
         Returns:
             None
         """
-        self.Zbar = self.get_ionization(self.Z, self.n_i, self.Te)
+        self.Zbar = self.Zbar_func(self.n_i, self.Te)
 
-    def make_n_i_profile(self):
+    def initialize_n_i_profile(self):
         """
         Makes an initial temperature profile after laser heating for the ions
         Args:
@@ -349,10 +405,15 @@ class Measurements():
         def gaussian(x, FWHM , P):
             return np.exp(-np.log(2)* ( 4*x**2/FWHM**2)**P )
 
+        # p0 = (50e-6,1)
+        # try:
+        #     FWHM_fit = curve_fit(gaussian, self.x, self.I_unnormalized_of_r/np.max(self.I_unnormalized_of_r), p0=p0)
+        # except RuntimeError as err:
+        #     print(f"Intensity supergaussian fit error, defaulting to: {p0}.\nRuntimeError: {err}")
+        #     FWHM_fit = np.array([ p0  ])
 
-        FWHM_fit = curve_fit(gaussian, self.x, self.I_unnormalized_of_r/np.max(self.I_unnormalized_of_r), p0=(50e-6,1))
-        self.I_of_r_fit = gaussian(self.x, *FWHM_fit[0])
-        self.FWHM = FWHM_fit[0][0]
+        # self.I_of_r_fit = gaussian(self.x, *FWHM_fit[0])
+        # self.FWHM = FWHM_fit[0][0]
         
 
     def plot_parameter(self, parameter_grid, label=''):
@@ -389,7 +450,7 @@ class Measurements():
 
         # Create the Intensity plot
         # lax.plot(self.X[:,0]*1e6, Intensity_grid/np.max(Intensity_grid), 'b.')
-        lax.plot(self.x*1e6, self.I_of_r_fit, 'b-')
+        lax.plot(self.x*1e6, self.I_unnormalized_of_r/np.max(self.I_unnormalized_of_r), 'b-')
         lax.set_xlabel('x (μm)', fontsize=15)
         lax.set_ylabel('Intensity', fontsize=15)
         lax.tick_params(labelsize=20)
@@ -397,9 +458,9 @@ class Measurements():
 
         props = dict(boxstyle='round', facecolor='white', alpha=0.5)
         
-        textstr = "FWHM = {0:.1f} μm".format(self.FWHM*1e6)
-        lax.text(0.03, 0.93, textstr, transform=lax.transAxes, fontsize=12,
-            verticalalignment='top', bbox=props)
+        # textstr = "FWHM = {0:.1f} μm".format(self.FWHM*1e6)
+        # lax.text(0.03, 0.93, textstr, transform=lax.transAxes, fontsize=12,
+        #     verticalalignment='top', bbox=props)
 
         # Make a subplot for the colour bar
         bax = fig.add_subplot(gs[1])
@@ -467,13 +528,14 @@ class Measurements():
     def plot_spectral_Intensity(self):
         plt.figure(figsize=(6, 4))
         plt.plot(self.λs*1e9, self.Iλ_unnormalized/np.max(self.Iλ_unnormalized),'.',  label="Integrated over profile")
-        plt.plot(self.λs*1e9, self.spectral_intensity_fit/np.max(self.spectral_intensity_fit), label="Te={0:.2f} kK".format(self.Te_fit*1e-3))
+        plt.plot(self.λs*1e9, self.spectral_intensity_fit/np.max(self.spectral_intensity_fit), label="BB Fit: Te={0:.2f} kK".format(self.Te_fit*1e-3))
 
         plt.xlabel('λ [nm]', fontsize=20)
         plt.ylabel('Normalized Intensity', fontsize=20)
-        plt.xscale('log')
+        plt.yscale('log')
+        # plt.xscale('log')
         plt.legend(fontsize=12)
         plt.tick_params(labelsize=20)
-        plt.ylim(0,1.1)
-
+        plt.ylim( self.Iλ_unnormalized[-1]/np.max(self.Iλ_unnormalized)/2  , 1.5)
+        plt.xlim(230,850)
         plt.show()

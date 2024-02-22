@@ -155,7 +155,7 @@ class Physical_Parameters():
         c2 = 0.983333
         
 
-        convert = num_density*mc_to_cc*1.6726e-24
+        convert = num_density* 1e-6 *1.6726e-24
         R = convert/Z
         T0_in_eV = T*K_to_eV/Z**(4./3.)
         Tf_in_eV = T0_in_eV*K_to_eV/(1 + T0_in_eV)
@@ -342,7 +342,7 @@ class Physical_Parameters():
         """
         Zbar = n_e/n_i
         ω_av = 2.701*k_B* Te/hbar
-        κ_eff = cls.photon_absorption_coefficient(ω_av, m_i, n_i, n_e, Ti, Te, Zbar)
+        κ_eff = cls.photon_absorption_coefficient(ω_av, m_i, n_i, n_e, Ti, Te)
         return κ_eff 
 
     @classmethod
@@ -935,10 +935,13 @@ class SMT(Physical_Parameters):
         """
 
         lambda_i = cls.ion_Debye_length(ni, Ti, Zi)
-        lambda_e = cls.electron_Debye_length(ne, Te)
+        EF = cls.Fermi_energy(ne)
+        lambda_e = 1/np.sqrt( ee**2/ε_0*ne/np.sqrt(k_B**2*Te**2 + 4/9*EF**2) )  #cls.Thomas_Fermi_wavelength(ne, Te)
         ai = cls.r_WignerSeitz(ni)
 
         lambda_eff = (1.0/(lambda_i**2 + ai**2) +  1.0/lambda_e**2)**(-1/2)
+        # lambda_eff = (1.0/(lambda_i**2 + ai**2))**(-1/2)
+        # lambda_eff = (1.0/lambda_e**2)**(-1/2)
 
         return lambda_eff
     
