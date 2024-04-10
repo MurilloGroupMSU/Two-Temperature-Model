@@ -151,13 +151,19 @@ class HydroModel():
             if sol.success == False:
                 print("WARNING, Zbar minimizer not converge.")
                 print(sol)
+                bad_ind = np.argmax(sol.fun)
+                print(f"Worst point is at index = {bad_ind}, r={self.grid.r[bad_ind]}, fun = {sol.fun[bad_ind]}, Te = {self.Te[bad_ind]} ")
+
+
+            success = sol.success
             Zbar = Zbar_func(Te)
         else:
             Te = Te_func(Zbar*n_i)
+            success = True
         # print(f"Erec_density/Ek_e = {Erec_density(Zbar, Te)/Ek_e}")
         # print(f"Erec_density = {Erec_density(Zbar)}")
         # print(f"From get_Te: Zbar={Zbar}, ΔZbar={Zbar_back_a_step-Zbar}, Ek_e/Erec_density ={Ek_e/Erec_density(Zbar)}")        
-        return Te, Zbar
+        return Te, Zbar, Erec_density(Zbar, Te), success
 
     def get_FWHM(self):
         FWHM_index = np.argmin(np.abs(self.Te - 0.5*self.Te[0]))
@@ -182,6 +188,10 @@ class HydroModel():
         self.n_e_list = [self.n_e.copy()]
         self.n_i_list = [self.n_i.copy()]
         self.FWHM_list = [self.get_FWHM()]
+        self.ΔEe_recombination_list = []
+        self.ΔEe_ion_equil_list = []
+        self.ΔEe_work_list = []
+
         
         self.v = np.zeros_like(self.n_e) # initialize velocity at zero
         self.v_list = [self.v.copy()]
@@ -214,10 +224,9 @@ class HydroModel():
             # electron
             flux_Ek_e = 2*π*self.grid.r*( - 0*ke*self.grad(self.Te)  + self.v*(  self.Ek_e + self.get_Pe() ))
             net_flux_Ek_e = flux_Ek_e[1:]  - flux_Ek_e[:-1]
-            self.Ek_e[:-1] = self.Ek_e[:-1] + self.dt * ( 
-                    - net_flux_Ek_e/self.grid.cell_volumes
-                    - (G*(self.Te - self.Ti))[:-1]
-                    ) 
+            ΔEk_e_from_flux = self.dt * -net_flux_Ek_e/self.grid.cell_volumes
+            ΔEk_e_from_Gei  = - self.dt*(G*(self.Te - self.Ti))[:-1]
+            self.Ek_e[:-1] = self.Ek_e[:-1] + ΔEk_e_from_flux + ΔEk_e_from_Gei
                     
 
             # Update densities with continuity equation and quasineutrality
@@ -230,7 +239,7 @@ class HydroModel():
             # self.n_e[:-1] = self.n_e[:-1] - self.dt * net_flux_ne/self.grid.cell_volumes
 
             if self.electron_model == 'equilibrium':
-                self.Te, self.Zbar = self.get_Te(self.Ek_e, self.n_i, self.Zbar, χ0_factor=χ0_factor) # Finds temperature including from recombination heating
+                self.Te, self.Zbar, self.Erecombination, success = self.get_Te(self.Ek_e, self.n_i, self.Zbar, χ0_factor=χ0_factor) # Finds temperature including from recombination heating
                 self.n_e = self.n_i*self.Zbar # enforce quasineutrality
                 self.Ek_e = self.get_Ek_e() # Effectively adds recombination heating to Ek_e
             elif self.electron_model == 'fixed_Zbar':
@@ -238,7 +247,7 @@ class HydroModel():
                 net_flux_ne = flux_ne[1:] - flux_ne[:-1]
                 self.n_e[:-1] = self.n_e[:-1] - self.dt * net_flux_ne/self.grid.cell_volumes
                 self.Zbar = self.n_e/self.n_i
-                self.Te, _ = self.get_Te(self.Ek_e, self.n_i, Zbar = self.Zbar) 
+                self.Te, _ ,_,_ = self.get_Te(self.Ek_e, self.n_i, Zbar = self.Zbar) 
 
             # Update velocities
             self.v[:-1] = self.v[:-1] + self.dt * (
@@ -261,3 +270,10 @@ class HydroModel():
                 self.n_i_list.append(self.n_i.copy())
                 self.FWHM_list.append(self.get_FWHM())
                 self.Zbar_list = np.array(self.n_e_list)/np.array(self.n_i_list)
+                self.ΔEe_recombination_list.append(self.grid.integrate_f(self.Erecombination[:-1]))
+                self.ΔEe_ion_equil_list.append(self.grid.integrate_f(ΔEk_e_from_Gei))
+                self.ΔEe_work_list.append(self.grid.integrate_f(ΔEk_e_from_flux))
+
+            if success is False:
+                print("Fail Zbar, breaking.")
+                break

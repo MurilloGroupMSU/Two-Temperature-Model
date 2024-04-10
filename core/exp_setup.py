@@ -13,7 +13,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 from physics import JT_GMS as jt_mod
 from physics import SMT as smt_mod
-from constants import *
+from .constants import *
 
 
 import matplotlib.gridspec as gridspec
@@ -213,8 +213,8 @@ class Experiment():
             None
         """
         if self.ionization_model == 'TF':
-            self.Zbar_func = lambda n_i, Te: self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
-            self.χ0_func   = lambda n_i, Te: 0
+            self.Zbar_func = lambda n_i, Te: 0.5*self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
+            self.χ0_func   = lambda n_i, Te: np.nan
 
             self.Zbar_func = np.vectorize(self.Zbar_func)
             self.χ0_func = np.vectorize(self.χ0_func)
@@ -516,26 +516,46 @@ class Measurements():
         plt.tight_layout()
         plt.show()
         
-    def fit_Te_with_spectral_Intensity(self):
+    def fit_Te_with_spectral_Intensity(self, fit_to_observed_λ_only = False, observed_λ_range = [230e-9,850e-9]):
         self.test_Boltzmann = lambda Te: jt_mod.photon_wavelength_density(self.λs, Te)
-        f_to_min = lambda Te: np.linalg.norm( self.Iλ_unnormalized/np.max(self.Iλ_unnormalized) - self.test_Boltzmann(Te)/np.max(self.test_Boltzmann(Te)) )
+
+        if fit_to_observed_λ_only is False:
+            f_to_min = lambda Te: np.linalg.norm( self.Iλ_unnormalized/np.max(self.Iλ_unnormalized) - self.test_Boltzmann(Te)/np.max(self.test_Boltzmann(Te)) )
+        else:
+            observed_λ_indices = ((self.λs > observed_λ_range[0]) * (self.λs < observed_λ_range[1])).nonzero() 
+            f_to_min = lambda Te: np.linalg.norm( self.Iλ_unnormalized[observed_λ_indices]/np.max(self.Iλ_unnormalized[observed_λ_indices]) - self.test_Boltzmann(Te)[observed_λ_indices]/np.max(self.test_Boltzmann(Te)[observed_λ_indices]) )
+
         λ_peak = self.λs[np.argmax(self.Iλ_unnormalized/np.max(self.Iλ_unnormalized))]
         T_peak = 2.897e-3/λ_peak
         sol = minimize(f_to_min, T_peak)
+
         self.Te_fit = float(sol.x)
         self.spectral_intensity_fit = self.test_Boltzmann(self.Te_fit)
         
     def plot_spectral_Intensity(self):
-        plt.figure(figsize=(6, 4))
-        plt.plot(self.λs*1e9, self.Iλ_unnormalized/np.max(self.Iλ_unnormalized),'.',  label="Integrated over profile")
-        plt.plot(self.λs*1e9, self.spectral_intensity_fit/np.max(self.spectral_intensity_fit), label="BB Fit: Te={0:.2f} kK".format(self.Te_fit*1e-3))
+        fig, axs = plt.subplots(1,2, figsize=(10, 4))
 
-        plt.xlabel('λ [nm]', fontsize=20)
-        plt.ylabel('Normalized Intensity', fontsize=20)
-        plt.yscale('log')
-        # plt.xscale('log')
-        plt.legend(fontsize=12)
-        plt.tick_params(labelsize=20)
-        plt.ylim( self.Iλ_unnormalized[-1]/np.max(self.Iλ_unnormalized)/2  , 1.5)
-        plt.xlim(230,850)
+        # Both plots of intensity over wavelength       
+        for ax in axs:
+            ax.plot(self.λs*1e9, self.Iλ_unnormalized/np.max(self.Iλ_unnormalized),'.',  label="Integrated over profile")
+            ax.plot(self.λs*1e9, self.spectral_intensity_fit/np.max(self.spectral_intensity_fit), label="BB Fit: Te={0:.2f} kK".format(self.Te_fit*1e-3))
+            ax.set_xlabel('λ [nm]', fontsize=20)
+            ax.set_ylabel('Normalized Intensity', fontsize=20)
+            ax.set_yscale('log')
+            # plt.xscale('log')
+            ax.legend(fontsize=12)
+            ax.tick_params(labelsize=20)
+        
+        
+        axL, axR = axs
+        
+        # Left is zoomed out with log
+        axL.set_xscale('log')
+        
+        # Right is linear zoom on measured wavelengths
+        axR.set_xlim(230,850)
+        
+        # ax.set_ylim( self.Iλ_unnormalized[-1]/np.max(self.Iλ_unnormalized)/2  , 1.5)
+        
+        plt.tight_layout()
         plt.show()
