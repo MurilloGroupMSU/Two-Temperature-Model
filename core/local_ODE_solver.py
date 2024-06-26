@@ -111,6 +111,7 @@ class LocalModel():
         self.Te_list, self.Ti_list = [self.Te], [self.Ti]
         self.Ek_e_list = [ self.get_Ek_e() ]
         self.n_e_list = [self.n_e]
+        self.G_list = [self.G_rescale * self.G(self.n_e, self.Zbar, self.Te,self.Ti) ]
         self.ΔEe_recombination_list = []
         self.ΔEe_ion_equil_list = []
 
@@ -153,7 +154,7 @@ class LocalModel():
                 self.Zbar_list = np.array(self.n_e_list)/self.n_i
                 self.ΔEe_recombination_list.append(self.Erecombination)
                 self.ΔEe_ion_equil_list.append(self.ΔEk_e_from_Gei)
-
+                self.G_list.append(G)
 
             if success is False:
                 print("Fail Zbar, breaking.")
@@ -166,5 +167,6 @@ class LocalModel():
         self.Ek_e_list = np.array(self.Ek_e_list)
         self.n_e_list = np.array(self.n_e_list)
         self.Zbar_list = np.array(self.Zbar_list)
+        self.G_list  = np.array(self.G_list)
         self.ΔEe_recombination_list = np.array(self.ΔEe_recombination_list)
         self.ΔEe_ion_equil_list = np.array(self.ΔEe_ion_equil_list)
