@@ -72,7 +72,7 @@ class LocalModel():
         Erec(t_i, x_i) = (Zbar(t_i, x_i)- Zbar(t_{i-1},x_i - v Δt)) * n_i(x_i,t_i) * χ0(x_i, t_i)
         Zbar_back_a_step = Zbar(t_{i-1},x_i- v(x_i)  Δt) ~ Zbar(t_{i-1},x_i)  - v Δt d/dx Zbar(t_{i-1},x_i) is what we actually need
         """
-        Erec_density = lambda Zbar, Te: (Zbar_previous - Zbar)*self.n_i*self.χ_func(Te) # positive means energy is released into electrons, since ionization decreased
+        Erec_density = lambda Zbar, Te: (Zbar_previous*self.χ_func(self.Te) - Zbar*self.χ_func(Te))*self.n_i # positive means energy is released into electrons, since ionization decreased
         Te_func = lambda n_e, Te: 2/3 * (Ek_e  + Erec_density(n_e/self.n_i, Te))/(n_e*k_B)
         # if np.all(Zbar==None):
         
