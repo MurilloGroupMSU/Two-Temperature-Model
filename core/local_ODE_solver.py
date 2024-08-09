@@ -13,6 +13,7 @@ from scipy.optimize import root
 from scipy.special import lambertw as W0
 
 
+
 class LocalModel():
     """
     Implements a local model of a plasma, following the evolution of ions and electrons over time assuming spatial homogeneity.
@@ -170,3 +171,26 @@ class LocalModel():
         self.G_list  = np.array(self.G_list)
         self.ΔEe_recombination_list = np.array(self.ΔEe_recombination_list)
         self.ΔEe_ion_equil_list = np.array(self.ΔEe_ion_equil_list)
+
+
+class AALocalModel(LocalModel):
+
+    def __init__(self, Z, m_i, Ti_init, Te_init, ni_init, Zbar_func = None, Ee_func = None, Te_func = None, transport_model = "SMT", G_rescale = 1):
+        super().__init__(Z, m_i, Ti_init, Te_init, ni_init, Zbar_func = Zbar_func, χ_func = None, transport_model = transport_model , G_rescale = G_rescale)
+        self.Ee_func = Ee_func
+        self.Te_func = Te_func
+    
+    def get_Ek_e(self):
+        # if self.Ee_func is None:
+        #     return 3/2 * k_B * self.Te * self.n_e 
+        # else:
+        return self.Ee_func(self.Te)
+    
+    def get_Te(self, Ek_e, Zbar_previous, Zbar=None):
+        # if self.Te_func is None:
+        #     ne = self.Zbar_func(self.Te)*self.n_i
+        #     return 2/3 * Ek_e/ne/k_B  
+        # else:
+        Te = self.Te_func(Ek_e)
+        Zbar = self.Zbar_func(self.Te)
+        return  Te, Zbar, 0, 1
