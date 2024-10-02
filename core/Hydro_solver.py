@@ -6,13 +6,13 @@
 
 
 import numpy as np
-from physics import JT_GMS as jt_mod
-from physics import SMT as smt_mod
-from constants import *
-
 from scipy.optimize import root
 from scipy.special import lambertw as W0
 
+from .physics import JT_GMS as jt_mod
+from .physics import SMT as smt_mod
+from .constants import *
+from .config import PACKAGE_DIR, CORE_DIR
 
 class HydroModel():
     """
@@ -131,17 +131,17 @@ class HydroModel():
     def get_Ti_from_Ei(self, Eki, ni):
         return 2/3 * Eki/ni/k_B  
 
-    def get_Te(self, Ek_e, n_i, Zbar_previous, Zbar=None, χ0_factor= 1):
+    def get_Te(self, Ek_e, n_i, Zbar_previous, Zbar=None, χ1_factor= 1):
         """
-        χ0_factor allows setting recombination heating to zero by χ0_factor=0. χ0_factor=1 does nothing
+        χ1_factor allows setting recombination heating to zero by χ1_factor=0. χ1_factor=1 does nothing
 
         Finds the temperature of the electrons at a given point using the amount of kinetic energy there, plus what is released from recombination
         Zbar_previous is defined as Zbar(t_{i-1},x_i)
-        Erec(t_i, x_i) = (Zbar(t_i, x_i)- Zbar(t_{i-1},x_i - v Δt)) * n_i(x_i,t_i) * χ0(x_i, t_i)
+        Erec(t_i, x_i) = (Zbar(t_i, x_i)- Zbar(t_{i-1},x_i - v Δt)) * n_i(x_i,t_i) * χ1(x_i, t_i)
         Zbar_back_a_step = Zbar(t_{i-1},x_i- v(x_i)  Δt) ~ Zbar(t_{i-1},x_i)  - v Δt d/dx Zbar(t_{i-1},x_i) is what we actually need
         """
         Zbar_back_a_step = Zbar_previous - self.v*self.dt*np.gradient(Zbar_previous, self.grid.r)
-        Erec_density = lambda Zbar, Te: (Zbar_back_a_step - Zbar)*n_i*self.experiment.χ0_func(n_i, Te)*χ0_factor # positive means energy is released into electrons, since ionization decreased
+        Erec_density = lambda Zbar, Te: (Zbar_back_a_step - Zbar)*n_i*self.experiment.χ1_func(n_i, Te)*χ1_factor # positive means energy is released into electrons, since ionization decreased
         Te_func = lambda n_e, Te: 2/3 * (Ek_e  + Erec_density(n_e/n_i, Te))/(n_e*k_B)
         if np.all(Zbar==None):
             Zbar_func = lambda Te: self.experiment.Zbar_func(n_i, Te)
@@ -171,7 +171,7 @@ class HydroModel():
         return FWHM
 
 
-    def solve_hydro(self, dt=None, tmax=None, χ0_factor= 1 ):
+    def solve_hydro(self, dt=None, tmax=None, χ1_factor= 1 ):
         """
         Solves TTM model using finite-volume method. 
         Args:
@@ -239,7 +239,7 @@ class HydroModel():
             # self.n_e[:-1] = self.n_e[:-1] - self.dt * net_flux_ne/self.grid.cell_volumes
 
             if self.electron_model == 'equilibrium':
-                self.Te, self.Zbar, self.Erecombination, success = self.get_Te(self.Ek_e, self.n_i, self.Zbar, χ0_factor=χ0_factor) # Finds temperature including from recombination heating
+                self.Te, self.Zbar, self.Erecombination, success = self.get_Te(self.Ek_e, self.n_i, self.Zbar, χ1_factor=χ1_factor) # Finds temperature including from recombination heating
                 self.n_e = self.n_i*self.Zbar # enforce quasineutrality
                 self.Ek_e = self.get_Ek_e() # Effectively adds recombination heating to Ek_e
             elif self.electron_model == 'fixed_Zbar':

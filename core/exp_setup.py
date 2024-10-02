@@ -10,17 +10,16 @@ from pandas import read_csv
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
 from scipy.interpolate import RegularGridInterpolator
-
-from physics import JT_GMS as jt_mod
-from physics import SMT as smt_mod
-from .constants import *
-
-
 import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
-
 from scipy.optimize import root, minimize
+
+from .physics import JT_GMS as jt_mod
+from .physics import SMT as smt_mod
+from .constants import *
+
+
 
 class Cylindrical_Grid():
     """
@@ -68,8 +67,10 @@ class Experiment():
         self.Te_full_width_at_half_maximum = Te_full_width_at_half_maximum
         self.Te_experiment_is_peak = Te_experiment_is_peak
 
-        if ion_temperature_model == 'gaussian':
-            self.Ti_exp_init = Ti_experiment_initial
+        if ion_temperature_model in ('gaussian', 'uniform')  :
+            self.Ti_exp_init = Ti_experimental_initial
+        else:
+            self.Ti_exp_init = None
         self.ionization_model = ionization_model # TF or input from something like Saha
         self.ionization_file  = ionization_file  # TF or input from something like Saha
         self.ion_temperature_model = ion_temperature_model
@@ -96,22 +97,6 @@ class Experiment():
         width_index = np.argmin(np.abs(self.grid.r - max_r))
 
         return self.grid.integrate_f(n_profile[:-1]*T_profile[:-1], endpoint = width_index)/self.grid.integrate_f(n_profile[:-1], endpoint=width_index)
-
-    def make_gaussian_Ti_profile(self):
-        """
-        NEEDS WORK
-        Zbar, ne <-> Te needs to be self-consistent
-
-        Makes an initial temperature profile after laser heating for the electrons and ion.
-        Currently assumes measured Temperature is based on bulk average over laser width region
-        Args:
-            None
-        Returns:
-            None
-        """
-        self.Ti_peak = self.Te_peak*self.Ti_exp_init/self.Te_exp_init
-        self.Ti = self.T_distribution(self.Ti_peak)
-        print("Using gaussian model for Ti: Ti_max = {0:.3e} K".format(self.Ti_peak))
 
     def make_Te_profile(self):
         """
@@ -163,6 +148,35 @@ class Experiment():
         self.make_Te_profile()
 
         
+    def make_gaussian_Ti_profile(self):
+        """
+        NEEDS WORK
+        Zbar, ne <-> Te needs to be self-consistent
+
+        Makes an initial temperature profile after laser heating for the electrons and ion.
+        Currently assumes measured Temperature is based on bulk average over laser width region
+        Args:
+            None
+        Returns:
+            None
+        """
+        self.Ti_peak = self.Te_peak*self.Ti_exp_init/self.Te_exp_init
+        self.Ti = self.T_distribution(self.Ti_peak)
+        print("Using gaussian model for Ti: Ti_max = {0:.3e} K".format(self.Ti_peak))
+    
+    def make_uniform_Ti_profile(self):
+        """
+        Makes a uniform initial temperature profile.
+        Args:
+            None
+        Returns:
+            None
+        """
+        self.Ti_peak = self.Ti_exp_init
+        self.Ti = self.Ti_peak*np.ones_like(self.Te)
+        print("Using gaussian model for Ti: Ti_max = {0:.3e} K".format(self.Ti_peak))
+
+    
     def make_MD_Ti_profile(self):
         "Needs improvement! Better exptrapolationg to high Z? Exp?"
   
@@ -202,7 +216,8 @@ class Experiment():
             self.make_gaussian_Ti_profile()
         elif self.ion_temperature_model == 'MD':
             self.make_MD_Ti_profile()
-
+        elif  self.ion_temperature_model == 'uniform':
+            self.make_uniform_Ti_profile()
 
     def make_ionization_function(self, Z):
         """
@@ -214,26 +229,29 @@ class Experiment():
         """
         if self.ionization_model == 'TF':
             self.Zbar_func = lambda n_i, Te: 0.5*self.params.Thomas_Fermi_Zbar(Z, n_i, Te)
-            self.χ0_func   = lambda n_i, Te: np.nan
+            self.χ1_func   = lambda n_i, Te: np.nan
 
             self.Zbar_func = np.vectorize(self.Zbar_func)
-            self.χ0_func = np.vectorize(self.χ0_func)
+            self.χ1_func = np.vectorize(self.χ1_func)
 
         elif self.ionization_model == 'input':
-            N_n, N_T = 20, 100
             saved_data = read_csv(self.ionization_file, delim_whitespace=True, header=1)
-            n_invm3_mesh = np.array(saved_data['n[1/cc]']).reshape(N_n, N_T)*1e6
-            T_K_mesh     = np.array(saved_data['T[K]']).reshape(N_n, N_T)
+            n_invm3_raw = np.array(saved_data['n[1/cc]'])*1e6
+            T_K_raw     = np.array(saved_data['T[K]'])
+            N_n, N_T = len(set(n_invm3_raw)), len(set(T_K_raw)) # finds number of unique temepratures, densities
+
+            n_invm3_mesh = n_invm3_raw.reshape(N_n, N_T)
+            T_K_mesh     = T_K_raw.reshape(N_n, N_T)
             Zbar_mesh    = np.array(saved_data['Zbar']).reshape(N_n, N_T)
-            χ0_J_mesh    = np.array(saved_data['χ0[eV]']).reshape(N_n, N_T)*eV_to_J
+            χ1_J_mesh    = np.array(saved_data['χ_1[eV]']).reshape(N_n, N_T)*eV_to_J
             
             zbar_interp = RegularGridInterpolator((n_invm3_mesh[:,0],T_K_mesh[0,:]), Zbar_mesh, bounds_error=False)
-            χ0_interp   = RegularGridInterpolator((n_invm3_mesh[:,0],T_K_mesh[0,:]), χ0_J_mesh, bounds_error=False)
+            χ1_interp   = RegularGridInterpolator((n_invm3_mesh[:,0],T_K_mesh[0,:]), χ1_J_mesh, bounds_error=False)
             
             # self.Zbar_func = lambda n_i, Te: zbar_interp( (n_i, Te) )
-            # self.χ0_func   = lambda n_i, Te: χ0_interp( (n_i, Te) )
+            # self.χ1_func   = lambda n_i, Te: χ1_interp( (n_i, Te) )
             # self.Zbar_func = np.vectorize(self.Zbar_func)
-            # self.χ0_func   = np.vectorize(self.χ0_func)
+            # self.χ1_func   = np.vectorize(self.χ1_func)
 
             @np.vectorize()
             def Zbar_func(n_i, Te):
@@ -250,7 +268,7 @@ class Experiment():
                     return zbar_interp((n_i,Te))
 
             @np.vectorize()
-            def χ0_func(n_i, Te):
+            def χ1_func(n_i, Te):
                 # above_n_i = n_i > np.max(n_invm3_mesh[:,0])
                 # below_n_i = n_i < np.min(n_invm3_mesh[:,0])
                 above_Te  = Te > np.max(T_K_mesh[0,:])
@@ -258,14 +276,14 @@ class Experiment():
                 
                 if above_Te:
                     n_i_closest = np.argmin( np.abs( n_invm3_mesh[:,0]-n_i ))
-                    return χ0_J_mesh[n_i_closest,-1]
+                    return χ1_J_mesh[n_i_closest,-1]
                 elif below_Te:
                     n_i_closest = np.argmin( np.abs( n_invm3_mesh[:,0]-n_i ))
-                    return χ0_J_mesh[n_i_closest,0]
-                return χ0_interp((n_i,Te))
+                    return χ1_J_mesh[n_i_closest,0]
+                return χ1_interp((n_i,Te))
 
             self.Zbar_func = Zbar_func
-            self.χ0_func = χ0_func
+            self.χ1_func = χ1_func
 
                 
     def set_ionization(self):
@@ -334,6 +352,8 @@ class Measurements():
         self.Te_array  = Te_array
         self.Ti_array  = Ti_array
         self.Zbar_array= self.n_e_array/self.n_i_array
+        
+        self.FWHM = None # Is this needed?
         
         self.m_i = A*m_p
         
@@ -501,9 +521,9 @@ class Measurements():
 
         props = dict(boxstyle='round', facecolor='white', alpha=0.5)
         
-        textstr = "FWHM = {0:.1f} μm".format(self.FWHM*1e6)
-        lax.text(0.03, 0.93, textstr, transform=lax.transAxes, fontsize=12,
-            verticalalignment='top', bbox=props)
+        # textstr = "FWHM = {0:.1f} μm".format(self.FWHM*1e6)
+        # lax.text(0.03, 0.93, textstr, transform=lax.transAxes, fontsize=12,
+        #     verticalalignment='top', bbox=props)
 
         # Make a subplot for the colour bar
         bax = fig.add_subplot(gs[1])
